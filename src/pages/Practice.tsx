@@ -423,10 +423,17 @@ export const Practice: React.FC<PracticeProps> = ({
                       Ovozni qayta eshitish uchun bosing
                     </span>
                   </div>
-                ) : selectedMode === 'uzbek_to_english' ? (
-                  <h2 className="text-2xl sm:text-4xl font-black text-amber-300">
-                    {currentQ.targetWord.translation}
-                  </h2>
+                ) : selectedMode === 'uzbek_to_english' || selectedMode === 'type_answer' ? (
+                  <div className="space-y-2">
+                    <h2 className="text-2xl sm:text-4xl font-black text-amber-300">
+                      {currentQ.targetWord.translation}
+                    </h2>
+                    {currentQ.targetWord.partOfSpeech && (
+                      <span className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
+                        {currentQ.targetWord.partOfSpeech}
+                      </span>
+                    )}
+                  </div>
                 ) : selectedMode === 'true_false' ? (
                   <div className="space-y-3 pt-2">
                     <h2 className="text-3xl sm:text-4xl font-black text-white">
@@ -458,18 +465,34 @@ export const Practice: React.FC<PracticeProps> = ({
 
               {/* ANSWER OPTIONS / INPUT SECTION */}
               {selectedMode === 'type_answer' ? (
-                <form onSubmit={handleTypeSubmit} className="max-w-md mx-auto space-y-4">
-                  <div className="text-center text-sm text-slate-300 font-medium">
-                    Tarjimasi: <strong className="text-amber-300">{currentQ.targetWord.translation}</strong>
-                  </div>
-
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!isAnswerSubmitted) {
+                      handleTypeSubmit(e);
+                    } else {
+                      handleNextQuestion();
+                    }
+                  }}
+                  className="max-w-md mx-auto space-y-4"
+                >
                   <input
                     type="text"
                     value={typedAnswer}
                     onChange={(e) => setTypedAnswer(e.target.value)}
                     disabled={isAnswerSubmitted}
-                    placeholder="So'zni kiriting..."
-                    className="w-full px-5 py-3.5 rounded-2xl bg-slate-900 border border-white/10 text-white text-center font-bold text-lg placeholder-slate-600 focus:outline-none focus:border-amber-400/80"
+                    placeholder="Type the English word..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
+                    className={`w-full px-5 py-3.5 rounded-2xl bg-slate-900 border text-white text-center font-bold text-lg placeholder-slate-600 focus:outline-none transition-all ${
+                      isAnswerSubmitted
+                        ? isCorrect
+                          ? 'border-emerald-500/80 bg-emerald-500/10 text-emerald-200'
+                          : 'border-rose-500/80 bg-rose-500/10 text-rose-200'
+                        : 'border-white/10 focus:border-amber-400/80'
+                    }`}
                     autoFocus
                   />
 
@@ -477,7 +500,7 @@ export const Practice: React.FC<PracticeProps> = ({
                     <button
                       type="submit"
                       disabled={!typedAnswer.trim()}
-                      className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-all disabled:opacity-50"
+                      className="w-full py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-all disabled:opacity-50 active:scale-98 shadow-lg shadow-amber-400/20"
                     >
                       Tekshirish
                     </button>
@@ -585,20 +608,34 @@ export const Practice: React.FC<PracticeProps> = ({
                     )}
                     <div>
                       <div className="font-bold text-sm">
-                        {isCorrect ? 'Correct! To\'g\'ri javob ✓' : 'Wrong! Noto\'g\'ri ×'}
+                        {isCorrect ? '✅ To‘g‘ri!' : '❌ Noto‘g‘ri'}
                       </div>
-                      <div className="text-xs text-slate-300">
-                        To'g'ri javob: <strong>{currentQ.targetWord.word}</strong> — {currentQ.targetWord.translation}
-                      </div>
+                      {!isCorrect && (
+                        <div className="text-xs text-slate-300 mt-0.5">
+                          To‘g‘ri javob: <strong className="text-amber-300 font-semibold">{currentQ.targetWord.word}</strong>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleNextQuestion}
-                    className="px-5 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm hover:bg-amber-300 transition-all shrink-0 active:scale-95 shadow-md"
-                  >
-                    {currentIndex < questions.length - 1 ? 'Keyingisi &rarr;' : 'Natijani ko\'rish'}
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    {/* Pronounce the correct word upon answer */}
+                    <button
+                      type="button"
+                      onClick={() => speakWord(currentQ.targetWord.word)}
+                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-amber-300 transition-colors"
+                      title="Talaffuzni eshitish"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={handleNextQuestion}
+                      className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm hover:bg-amber-300 transition-all shrink-0 active:scale-95 shadow-md"
+                    >
+                      {currentIndex < questions.length - 1 ? 'Keyingisi \u2192' : 'Natijani ko\'rish'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
