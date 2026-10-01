@@ -180,10 +180,130 @@ export const EXAMPLE_PRESETS = [
   },
 ];
 
+const SYSTEM_PROMPT_VISION = `You are an expert English lexicographer, linguistic annotator, and English-to-Uzbek language teacher.
+Read the image and extract ALL English vocabulary items accurately.
+For each word, return:
+- word: clean English word
+- translation: accurate Uzbek translation (Latin alphabet)
+- definition: clear, simple English learner definition
+- example: natural example sentence
+- pronunciation: IPA phonetic transcription (e.g. /əˈbrɔːd/)
+- partOfSpeech: noun, verb, adjective, adverb, phrase, etc.
+Output strictly JSON conforming to: {"words": [{"word":"", "translation":"", "definition":"", "example":"", "pronunciation":"", "partOfSpeech":""}]}`;
+
+const SYSTEM_PROMPT_TEXT = `You are an expert English-to-Uzbek language teacher.
+Parse the input text and produce a list of English words with Uzbek translations, simple definitions, examples, IPA pronunciations, and parts of speech.
+Output strictly JSON conforming to: {"words": [{"word":"", "translation":"", "definition":"", "example":"", "pronunciation":"", "partOfSpeech":""}]}`;
+
+// Direct client-side Gemini fallback for Vercel static deployments
+async function directGeminiVision(imageBase64: string, mimeType: string, apiKey: string): Promise<AnalyzeResult> {
+  const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: mimeType || 'image/jpeg',
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: SYSTEM_PROMPT_VISION,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Gemini API xatosi.');
+      }
+
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(rawText);
+      return {
+        success: true,
+        count: parsed.words?.length || 0,
+        words: parsed.words || [],
+      };
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error('Direct Gemini API call failed.');
+}
+
+async function directGeminiText(text: string, apiKey: string): Promise<AnalyzeResult> {
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              {
+                text: `${SYSTEM_PROMPT_TEXT}\n\nInput text:\n"""\n${text}\n"""`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Gemini API xatosi.');
+      }
+
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(rawText);
+      return {
+        success: true,
+        count: parsed.words?.length || 0,
+        words: parsed.words || [],
+      };
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error('Direct Gemini text parsing failed.');
+}
+
 export async function analyzeVocabularyImage(
   imageBase64: string,
   mimeType: string = 'image/jpeg'
 ): Promise<AnalyzeResult> {
+  // 1. Try server endpoint /api/analyze-image (Vercel Serverless or Express server)
   try {
     const res = await fetch('/api/analyze-image', {
       method: 'POST',
@@ -196,29 +316,39 @@ export async function analyzeVocabularyImage(
       }),
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Server bilan bog\'lanishda xatolik yuz berdi.');
+    // If 404, it might be a static host without /api routes
+    if (res.status !== 404 && res.ok) {
+      const data = await res.json();
+      return {
+        success: true,
+        count: data.words?.length || 0,
+        words: data.words || [],
+      };
     }
-
-    return {
-      success: true,
-      count: data.words?.length || 0,
-      words: data.words || [],
-    };
-  } catch (error: any) {
-    console.error('analyzeVocabularyImage failed:', error);
-    return {
-      success: false,
-      count: 0,
-      words: [],
-      error: error?.message || 'Gemini tahlil jarayonida xatolik yuz berdi. Iltimos qayta urinib ko\'ring.',
-    };
+  } catch (serverErr) {
+    console.warn('/api/analyze-image unreachable, checking client fallback...', serverErr);
   }
+
+  // 2. Client-side fallback using VITE_GEMINI_API_KEY
+  const clientApiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  if (clientApiKey) {
+    try {
+      return await directGeminiVision(imageBase64, mimeType, clientApiKey);
+    } catch (clientErr: any) {
+      console.error('Direct Gemini Vision failed:', clientErr);
+    }
+  }
+
+  return {
+    success: false,
+    count: 0,
+    words: [],
+    error: 'AI tahlilida xatolik yuz berdi. Iltimos VITE_GEMINI_API_KEY sozlanganligini tekshiring yoki qayta urinib ko\'ring.',
+  };
 }
 
 export async function enrichVocabularyText(text: string): Promise<AnalyzeResult> {
+  // 1. Try server endpoint /api/enrich-text
   try {
     const res = await fetch('/api/enrich-text', {
       method: 'POST',
@@ -228,23 +358,32 @@ export async function enrichVocabularyText(text: string): Promise<AnalyzeResult>
       body: JSON.stringify({ text }),
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Matnni tahlil qilishda xatolik yuz berdi.');
+    if (res.status !== 404 && res.ok) {
+      const data = await res.json();
+      return {
+        success: true,
+        count: data.words?.length || 0,
+        words: data.words || [],
+      };
     }
-
-    return {
-      success: true,
-      count: data.words?.length || 0,
-      words: data.words || [],
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      count: 0,
-      words: [],
-      error: error?.message || 'Matnni tahlil qilishda xatolik yuz berdi.',
-    };
+  } catch (serverErr) {
+    console.warn('/api/enrich-text unreachable, checking client fallback...', serverErr);
   }
+
+  // 2. Client-side fallback using VITE_GEMINI_API_KEY
+  const clientApiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  if (clientApiKey) {
+    try {
+      return await directGeminiText(text, clientApiKey);
+    } catch (clientErr: any) {
+      console.error('Direct Gemini Text failed:', clientErr);
+    }
+  }
+
+  return {
+    success: false,
+    count: 0,
+    words: [],
+    error: 'Matnni tahlil qilishda xatolik yuz berdi.',
+  };
 }
