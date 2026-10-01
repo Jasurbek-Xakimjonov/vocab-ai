@@ -1,0 +1,6 @@
+{
+  "name": "VocabAI",
+  "description": "Turn your vocabulary into knowledge. Modern AI-powered English vocabulary flashcards and spaced repetition learning app.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
