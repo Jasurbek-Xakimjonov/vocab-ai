@@ -3,6 +3,7 @@ import { IrregularVerb } from '../types/irregularVerbs';
 import { INITIAL_IRREGULAR_VERBS } from '../data/irregularVerbsData';
 import { GrammarProgressRecord } from '../types/grammar';
 import { SpeakingResult } from '../types/speaking';
+import { VideoProgressState } from '../types/speakingVideos';
 
 const WORDS_STORAGE_KEY = 'vocabai_words_v1';
 const STATS_STORAGE_KEY = 'vocabai_stats_v1';
@@ -10,6 +11,7 @@ const PRACTICE_STORAGE_KEY = 'vocabai_practice_v1';
 const IRREGULAR_VERBS_KEY = 'vocabai_irregular_verbs_v1';
 const GRAMMAR_PROGRESS_KEY = 'vocabai_grammar_progress_v1';
 const SPEAKING_HISTORY_KEY = 'vocabai_speaking_history_v1';
+const VIDEO_PROGRESS_KEY = 'vocabai_video_progress_v1';
 
 export const INITIAL_VOCABULARY: VocabularyWord[] = [
   // Preserving user's original 20 words with high-fidelity enrichments
@@ -858,5 +860,87 @@ export const Storage = {
       console.error('Failed saving speaking history:', e);
     }
     this.incrementReviewedCount();
+  },
+
+  // ================= Speaking Videos Progress =================
+  getVideoProgress(): VideoProgressState {
+    try {
+      const raw = localStorage.getItem(VIDEO_PROGRESS_KEY);
+      if (!raw) {
+        return {
+          watchedVideoIds: [],
+          savedVideoIds: [],
+          speakingScores: {},
+        };
+      }
+      return JSON.parse(raw);
+    } catch (e) {
+      return {
+        watchedVideoIds: [],
+        savedVideoIds: [],
+        speakingScores: {},
+      };
+    }
+  },
+
+  saveVideoProgress(state: VideoProgressState): void {
+    try {
+      localStorage.setItem(VIDEO_PROGRESS_KEY, JSON.stringify(state));
+      window.dispatchEvent(new Event('vocabai_video_progress_updated'));
+    } catch (e) {
+      console.error('Failed saving video progress:', e);
+    }
+  },
+
+  markVideoWatched(videoId: string, watched: boolean = true): void {
+    const prog = this.getVideoProgress();
+    const set = new Set(prog.watchedVideoIds);
+    if (watched) {
+      set.add(videoId);
+      prog.lastWatchedVideoId = videoId;
+    } else {
+      set.delete(videoId);
+    }
+    prog.watchedVideoIds = Array.from(set);
+    this.saveVideoProgress(prog);
+    this.incrementReviewedCount();
+  },
+
+  toggleSaveVideo(videoId: string): boolean {
+    const prog = this.getVideoProgress();
+    const set = new Set(prog.savedVideoIds);
+    let isSaved = false;
+    if (set.has(videoId)) {
+      set.delete(videoId);
+      isSaved = false;
+    } else {
+      set.add(videoId);
+      isSaved = true;
+    }
+    prog.savedVideoIds = Array.from(set);
+    this.saveVideoProgress(prog);
+    return isSaved;
+  },
+
+  saveVideoSpeakingScore(videoId: string, sentenceId: string, score: number): void {
+    const prog = this.getVideoProgress();
+    const existing = prog.speakingScores[sentenceId];
+    const prevBest = existing ? existing.bestScore : 0;
+    prog.speakingScores[sentenceId] = {
+      bestScore: Math.max(prevBest, score),
+      completedAt: new Date().toISOString(),
+    };
+    if (!prog.watchedVideoIds.includes(videoId)) {
+      prog.watchedVideoIds.push(videoId);
+    }
+    prog.lastWatchedVideoId = videoId;
+    this.saveVideoProgress(prog);
+    this.incrementReviewedCount();
+  },
+
+  isWordInVocabulary(word: string): boolean {
+    const words = this.getWords();
+    const clean = word.toLowerCase().trim();
+    return words.some((w) => w.word.toLowerCase().trim() === clean);
   },
 };

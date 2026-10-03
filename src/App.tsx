@@ -13,6 +13,7 @@ import { ImportVocabulary } from './pages/ImportVocabulary';
 import { Flashcards } from './pages/Flashcards';
 import { IrregularVerbs } from './pages/IrregularVerbs';
 import { Speaking } from './pages/Speaking';
+import { SpeakingVideos } from './pages/SpeakingVideos';
 import { Grammar } from './pages/Grammar';
 import { Practice } from './pages/Practice';
 import { MyWords } from './pages/MyWords';
@@ -126,6 +127,13 @@ export function AppContent() {
 
           {currentTab === 'speaking' && (
             <Speaking />
+          )}
+
+          {currentTab === 'speaking-videos' && (
+            <SpeakingVideos
+              onRefreshWords={refreshWords}
+              onNavigate={setCurrentTab}
+            />
           )}
 
           {currentTab === 'grammar' && (

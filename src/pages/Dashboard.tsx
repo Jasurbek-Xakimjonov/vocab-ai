@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Play,
   RotateCcw,
+  Film,
 } from 'lucide-react';
 import { VocabularyWord, UserStats } from '../types/vocabulary';
 import { IrregularVerb } from '../types/irregularVerbs';
@@ -337,6 +338,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed">
               Jumlalarni mikrofonga inglizcha talaffuz qiling va AI so'zma-so'z aniqlik foizini baholasin.
+            </p>
+          </div>
+
+          {/* Card 3b: Speaking Videos */}
+          <div
+            onClick={() => onNavigate('speaking-videos')}
+            className="group p-6 rounded-3xl bg-[#0d1322] border border-amber-400/20 hover:border-amber-400/50 cursor-pointer transition-all hover:-translate-y-1 shadow-xl space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-400/10 text-amber-300 flex items-center justify-center font-bold">
+              <Film className="w-6 h-6" />
+            </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors">
+                Speaking Videos 🎬
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase tracking-wider">
+                Yangi
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              YouTube videolarni tomosha qiling, transkriptdan nutq mashqlarini bajaring va so'zlarni lug'atga qo'shing.
             </p>
           </div>
 

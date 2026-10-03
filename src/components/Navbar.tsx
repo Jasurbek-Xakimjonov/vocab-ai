@@ -42,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {currentTab === 'flashcards' && 'Flashcards (3D Kartochkalar)'}
             {currentTab === 'irregular-verbs' && 'Irregular Verbs (Noto\'g\'ri fe\'llar)'}
             {currentTab === 'speaking' && 'Speaking (Ovozli talaffuz)'}
+            {currentTab === 'speaking-videos' && 'Speaking Videos (Video orqali o\'rganish)'}
             {currentTab === 'grammar' && 'Grammar (Grammatika darslari)'}
             {currentTab === 'practice' && 'Practice (Mashqlar & Testlar)'}
             {currentTab === 'progress' && 'Progress (Natijalar & Statistika)'}

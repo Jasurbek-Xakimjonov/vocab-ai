@@ -10,6 +10,7 @@ import {
   Zap,
   Mic,
   GraduationCap,
+  Film,
 } from 'lucide-react';
 import { UserStats } from '../types/vocabulary';
 
@@ -19,6 +20,7 @@ export type NavTab =
   | 'flashcards'
   | 'irregular-verbs'
   | 'speaking'
+  | 'speaking-videos'
   | 'grammar'
   | 'practice'
   | 'progress'
@@ -75,6 +77,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Speaking',
       sublabel: 'Ovozli talaffuz',
       icon: Mic,
+    },
+    {
+      id: 'speaking-videos' as NavTab,
+      label: 'Speaking Videos',
+      sublabel: '🎬 Video & Nutq',
+      icon: Film,
+      highlight: true,
     },
     {
       id: 'grammar' as NavTab,

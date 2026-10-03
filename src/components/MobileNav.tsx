@@ -8,6 +8,7 @@ import {
   Zap,
   Mic,
   GraduationCap,
+  Film,
 } from 'lucide-react';
 import { NavTab } from './Sidebar';
 
@@ -20,6 +21,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab })
   const items = [
     { id: 'home' as NavTab, label: 'Asosiy', icon: LayoutDashboard },
     { id: 'my-words' as NavTab, label: "Lug'at", icon: BookOpen },
+    { id: 'speaking-videos' as NavTab, label: 'Videolar', icon: Film },
     { id: 'flashcards' as NavTab, label: 'Kartalar', icon: Layers },
     { id: 'irregular-verbs' as NavTab, label: "Fe'llar", icon: Zap },
     { id: 'speaking' as NavTab, label: 'Nutq', icon: Mic },
