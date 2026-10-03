@@ -36,6 +36,8 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   // Active filter for deck
   const [filterMode, setFilterMode] = useState<'all' | 'learning' | 'difficult' | 'favorites'>('all');
   const [viewMode, setViewMode] = useState<'single' | 'grid'>('single');
+  // Card orientation: default 'uz_to_en' (Front: Uzbek, Back: English)
+  const [cardOrientation, setCardOrientation] = useState<'uz_to_en' | 'en_to_uz'>('uz_to_en');
 
   // Deck state
   const [deck, setDeck] = useState<VocabularyWord[]>([]);
@@ -88,7 +90,13 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
 
   // Flip card
   const handleFlip = () => {
-    setIsFlipped((prev) => !prev);
+    setIsFlipped((prev) => {
+      const next = !prev;
+      if (next && cardOrientation === 'uz_to_en' && currentCard?.word) {
+        speakWord(currentCard.word);
+      }
+      return next;
+    });
   };
 
   // Next card
@@ -261,8 +269,28 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
           ))}
         </div>
 
-        {/* Action Buttons: Shuffle, View Mode */}
+        {/* Action Buttons: Shuffle, Orientation Switch, View Mode */}
         <div className="flex items-center gap-2">
+          {/* Orientation switch button */}
+          <button
+            onClick={() => {
+              setCardOrientation((prev) => (prev === 'uz_to_en' ? 'en_to_uz' : 'uz_to_en'));
+              setIsFlipped(false);
+              toast.info(
+                cardOrientation === 'uz_to_en'
+                  ? "Kartochka: Oldi Inglizcha, Orqasi O'zbekcha"
+                  : "Kartochka: Oldi O'zbekcha, Orqasi Inglizcha"
+              );
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+            title="Kartochka oldi va orqa tomonini almashtirish"
+          >
+            <RotateCw className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">
+              {cardOrientation === 'uz_to_en' ? "Oldi: 🇺🇿 O'zbekcha" : "Oldi: 🇬🇧 Inglizcha"}
+            </span>
+          </button>
+
           <button
             onClick={handleShuffle}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-white text-xs font-semibold transition-colors"
@@ -395,43 +423,68 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
                     <div className="absolute inset-0 backface-hidden rounded-3xl bg-gradient-to-br from-[#0e1628] via-[#0d1322] to-[#131f38] border border-white/10 hover:border-amber-400/40 p-8 sm:p-10 flex flex-col justify-between shadow-2xl transition-colors">
                       {/* Top Header */}
                       <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span className="font-semibold uppercase tracking-widest text-slate-500">
-                          English Vocabulary
+                        <span className="font-semibold uppercase tracking-widest text-amber-400/90 flex items-center gap-1.5">
+                          {cardOrientation === 'uz_to_en' ? (
+                            <>
+                              <span>🇺🇿</span>
+                              <span>O'zbekcha ma'nosi</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🇬🇧</span>
+                              <span>English Vocabulary</span>
+                            </>
+                          )}
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 text-amber-300 font-medium">
                           {currentCard.partOfSpeech || 'word'}
                         </span>
                       </div>
 
-                      {/* Middle: Word & Pronunciation */}
-                      <div className="text-center my-auto space-y-4">
-                        <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-                          {currentCard.word}
-                        </h2>
-
-                        <div className="flex items-center justify-center gap-2.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              speakWord(currentCard.word);
-                            }}
-                            className="w-10 h-10 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 hover:bg-amber-400 hover:text-slate-950 flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-md"
-                            title="Pronounce"
-                          >
-                            <Volume2 className="w-5 h-5" />
-                          </button>
-                          {currentCard.pronunciation && (
-                            <span className="text-slate-400 font-mono text-sm sm:text-base">
-                              {currentCard.pronunciation}
-                            </span>
-                          )}
+                      {/* Middle: Content */}
+                      {cardOrientation === 'uz_to_en' ? (
+                        <div className="text-center my-auto space-y-4">
+                          <h2 className="text-3xl sm:text-5xl font-black text-amber-300 tracking-tight leading-tight">
+                            {currentCard.translation}
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-400 font-light">
+                            Ushbu so'zning inglizcha shakli va talaffuzini eslashga harakat qiling
+                          </p>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="text-center my-auto space-y-4">
+                          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                            {currentCard.word}
+                          </h2>
+
+                          <div className="flex items-center justify-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                speakWord(currentCard.word);
+                              }}
+                              className="w-10 h-10 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 hover:bg-amber-400 hover:text-slate-950 flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-md"
+                              title="Pronounce"
+                            >
+                              <Volume2 className="w-5 h-5" />
+                            </button>
+                            {currentCard.pronunciation && (
+                              <span className="text-slate-400 font-mono text-sm sm:text-base">
+                                {currentCard.pronunciation}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Bottom: Flip Hint */}
                       <div className="text-center text-xs text-slate-500">
-                        <span>Aylantirish uchun bosing yoki Space tugmasi</span>
+                        <span>
+                          {cardOrientation === 'uz_to_en'
+                            ? "Inglizcha javobni ko'rish uchun bosing yoki Space"
+                            : "O'zbekcha tarjimani ko'rish uchun bosing yoki Space"}
+                        </span>
                       </div>
                     </div>
 
@@ -439,8 +492,18 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
                     <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-3xl bg-gradient-to-br from-[#121c33] via-[#0f172a] to-[#0a101f] border border-amber-400/30 p-8 sm:p-10 flex flex-col justify-between shadow-2xl">
                       {/* Top Header */}
                       <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span className="font-semibold uppercase tracking-widest text-amber-400/80">
-                          Tarjimasi & Ta'rifi
+                        <span className="font-semibold uppercase tracking-widest text-amber-400/90 flex items-center gap-1.5">
+                          {cardOrientation === 'uz_to_en' ? (
+                            <>
+                              <span>🇬🇧</span>
+                              <span>Inglizcha javob & Talaffuz</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🇺🇿</span>
+                              <span>Tarjimasi & Ta'rifi</span>
+                            </>
+                          )}
                         </span>
                         <button
                           type="button"
@@ -448,30 +511,60 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
                             e.stopPropagation();
                             speakWord(currentCard.word);
                           }}
-                          className="text-amber-400 hover:text-white p-1 transition-colors"
+                          className="text-amber-400 hover:text-white p-1 transition-colors flex items-center gap-1.5"
+                          title="Talaffuzni tinglash"
                         >
                           <Volume2 className="w-4 h-4" />
+                          <span className="text-[11px] font-semibold hidden sm:inline">Tinglash</span>
                         </button>
                       </div>
 
-                      {/* Middle: Uzbek Translation & English Definition */}
-                      <div className="text-center my-auto space-y-4">
-                        <h3 className="text-2xl sm:text-4xl font-extrabold text-amber-300 tracking-tight">
-                          {currentCard.translation}
-                        </h3>
+                      {/* Middle: Content */}
+                      {cardOrientation === 'uz_to_en' ? (
+                        <div className="text-center my-auto space-y-4">
+                          <h3 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                            {currentCard.word}
+                          </h3>
 
-                        {currentCard.definition && (
-                          <p className="text-xs sm:text-sm text-slate-300 font-light max-w-lg mx-auto">
-                            {currentCard.definition}
-                          </p>
-                        )}
+                          {currentCard.pronunciation && (
+                            <div className="flex items-center justify-center gap-2">
+                              <span className="font-mono text-amber-300 text-sm sm:text-base bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/20">
+                                {currentCard.pronunciation}
+                              </span>
+                            </div>
+                          )}
 
-                        {currentCard.example && (
-                          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5 text-xs sm:text-sm text-slate-400 italic max-w-md mx-auto">
-                            "{currentCard.example}"
-                          </div>
-                        )}
-                      </div>
+                          {currentCard.definition && (
+                            <p className="text-xs sm:text-sm text-slate-300 font-light max-w-lg mx-auto">
+                              "{currentCard.definition}"
+                            </p>
+                          )}
+
+                          {currentCard.example && (
+                            <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/5 text-xs sm:text-sm text-slate-400 italic max-w-md mx-auto">
+                              "{currentCard.example}"
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center my-auto space-y-4">
+                          <h3 className="text-2xl sm:text-4xl font-extrabold text-amber-300 tracking-tight">
+                            {currentCard.translation}
+                          </h3>
+
+                          {currentCard.definition && (
+                            <p className="text-xs sm:text-sm text-slate-300 font-light max-w-lg mx-auto">
+                              {currentCard.definition}
+                            </p>
+                          )}
+
+                          {currentCard.example && (
+                            <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5 text-xs sm:text-sm text-slate-400 italic max-w-md mx-auto">
+                              "{currentCard.example}"
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Bottom Hint */}
                       <div className="text-center text-xs text-slate-500">
@@ -584,10 +677,25 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
                   </button>
                 </div>
 
-                <h4 className="text-lg font-bold text-white mb-1">{item.word}</h4>
-                <p className="text-sm font-semibold text-amber-300/90 mb-2">
-                  {item.translation}
-                </p>
+                {cardOrientation === 'uz_to_en' ? (
+                  <div>
+                    <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-0.5">
+                      🇺🇿 O'zbekcha:
+                    </span>
+                    <h4 className="text-xl font-black text-amber-300 mb-2">{item.translation}</h4>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-0.5">
+                      🇬🇧 Inglizcha:
+                    </span>
+                    <p className="text-base font-bold text-white mb-2">{item.word}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="text-lg font-bold text-white mb-1">{item.word}</h4>
+                    <p className="text-sm font-semibold text-amber-300/90 mb-2">
+                      {item.translation}
+                    </p>
+                  </div>
+                )}
 
                 {item.definition && (
                   <p className="text-xs text-slate-400 line-clamp-2 italic">
