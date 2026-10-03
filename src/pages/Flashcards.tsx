@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Volume2,
   Shuffle,
@@ -43,22 +43,46 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   const [isFlipped, setIsFlipped] = useState(false);
   const [isDeckCompleted, setIsDeckCompleted] = useState(false);
 
-  // Initialize or re-filter deck
-  useEffect(() => {
-    let filtered = [...words];
-    if (filterMode === 'learning') {
+  // References to prevent resetting deck position during active review
+  const prevFilterModeRef = useRef(filterMode);
+  const deckInitializedRef = useRef(false);
+
+  // Helper to get filtered word list based on filterMode
+  const getFilteredWords = useCallback((sourceWords: VocabularyWord[], mode: typeof filterMode) => {
+    let filtered = [...sourceWords];
+    if (mode === 'learning') {
       filtered = filtered.filter((w) => w.status === 'learning');
-    } else if (filterMode === 'difficult') {
+    } else if (mode === 'difficult') {
       filtered = filtered.filter((w) => w.status === 'difficult');
-    } else if (filterMode === 'favorites') {
+    } else if (mode === 'favorites') {
       filtered = filtered.filter((w) => w.isFavorite);
     }
+    return filtered;
+  }, []);
 
-    setDeck(filtered);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setIsDeckCompleted(false);
-  }, [words, filterMode]);
+  // Initialize or re-filter deck only when filter changes or initially loaded
+  useEffect(() => {
+    const filterChanged = prevFilterModeRef.current !== filterMode;
+    prevFilterModeRef.current = filterMode;
+
+    const filtered = getFilteredWords(words, filterMode);
+
+    if (!deckInitializedRef.current || filterChanged) {
+      deckInitializedRef.current = true;
+      setDeck(filtered);
+      setCurrentIndex(0);
+      setIsFlipped(false);
+      setIsDeckCompleted(false);
+    } else {
+      // During active session when words update (e.g. from rating/favoriting),
+      // update word data in place without resetting currentIndex or restarting deck
+      setDeck((prevDeck) => {
+        if (prevDeck.length === 0) return filtered;
+        const wordMap = new Map(words.map((w) => [w.id, w]));
+        return prevDeck.map((item) => wordMap.get(item.id) || item);
+      });
+    }
+  }, [words, filterMode, getFilteredWords]);
 
   const currentCard = deck[currentIndex];
 
@@ -69,21 +93,28 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
 
   // Next card
   const handleNext = useCallback(() => {
-    if (currentIndex < deck.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-      setIsFlipped(false);
-    } else {
-      setIsDeckCompleted(true);
-    }
-  }, [currentIndex, deck.length]);
+    setCurrentIndex((prev) => {
+      if (prev < deck.length - 1) {
+        setIsFlipped(false);
+        return prev + 1;
+      } else {
+        setIsDeckCompleted(true);
+        setIsFlipped(false);
+        return prev;
+      }
+    });
+  }, [deck.length]);
 
   // Prev card
   const handlePrev = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
-      setIsFlipped(false);
-    }
-  }, [currentIndex]);
+    setCurrentIndex((prev) => {
+      if (prev > 0) {
+        setIsFlipped(false);
+        return prev - 1;
+      }
+      return prev;
+    });
+  }, []);
 
   // Shuffle deck
   const handleShuffle = () => {
@@ -100,18 +131,25 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
     toast.info('Kartochkalar aralashtirildi!');
   };
 
-  // Rate card (Again / Hard / Good / Easy)
+  // Rate card (Again / Hard / Good / Easy) - None of them auto-advance
   const handleRate = (rating: RatingLevel) => {
     if (!currentCard) return;
 
     Storage.rateWord(currentCard.id, rating);
-    onRefreshWords();
 
     if (rating === 'again') {
       toast.info(`"${currentCard.word}" takrorlash uchun qayta kiritildi.`);
+    } else if (rating === 'hard') {
+      toast.info(`"${currentCard.word}" o'rganilmoqda deb saqlandi.`);
+    } else if (rating === 'good') {
+      toast.success(`"${currentCard.word}" yodlanganlarga qo'shildi! ✅`);
+    } else if (rating === 'easy') {
+      toast.success(`"${currentCard.word}" oson (yodlangan) deb saqlandi! ✅`);
     }
 
-    handleNext();
+    // Do NOT advance to next card - stay on current card for all ratings
+    // Inform parent app to sync stats/database
+    onRefreshWords();
   };
 
   // Toggle favorite
@@ -156,6 +194,8 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
 
   // Restart deck
   const handleRestart = () => {
+    const filtered = getFilteredWords(words, filterMode);
+    setDeck(filtered);
     setCurrentIndex(0);
     setIsFlipped(false);
     setIsDeckCompleted(false);

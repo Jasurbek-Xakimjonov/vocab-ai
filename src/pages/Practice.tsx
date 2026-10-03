@@ -11,13 +11,22 @@ import {
   HelpCircle,
   Check,
   X,
+  Zap,
+  BookOpen,
   VolumeX,
+  SlidersHorizontal,
+  Flame,
 } from 'lucide-react';
 import { VocabularyWord, PracticeMode } from '../types/vocabulary';
+import { IrregularVerb } from '../types/irregularVerbs';
 import { speakWord } from '../utils/speech';
 import { Storage } from '../utils/storage';
 import { useToast } from '../components/Toast';
 import { NavTab } from '../components/Sidebar';
+import {
+  PAST_SIMPLE_SENTENCE_TEMPLATES,
+  PAST_SIMPLE_NEGATIVE_QUESTIONS,
+} from '../utils/pastSimpleExercises';
 
 interface PracticeProps {
   words: VocabularyWord[];
@@ -26,11 +35,25 @@ interface PracticeProps {
 }
 
 interface Question {
-  targetWord: VocabularyWord;
+  targetWord?: VocabularyWord;
+  promptTitle?: string;
+  promptText?: string;
+  subPrompt?: string;
   options?: string[]; // for multiple choice
   correctOption?: string;
+  acceptedAnswers?: string[]; // for typing (supports multiple forms like was/were)
   isTrueStatement?: boolean; // for true/false
   statementTranslation?: string; // for true/false
+  verbDetails?: {
+    v1: string;
+    v2: string;
+    v3: string;
+    translation: string;
+    pronunciation?: string;
+  };
+  grammarTip?: string;
+  modeType?: 'mc' | 'typing' | 'tf' | 'audio';
+  audioWord?: string;
 }
 
 export const Practice: React.FC<PracticeProps> = ({
@@ -40,8 +63,10 @@ export const Practice: React.FC<PracticeProps> = ({
 }) => {
   const toast = useToast();
 
-  const [selectedMode, setSelectedMode] = useState<PracticeMode>('multiple_choice');
+  const [selectedMode, setSelectedMode] = useState<PracticeMode>('past_simple_verbs');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<'all' | 'past_simple' | 'vocab'>('past_simple');
+  const [questionCountChoice, setQuestionCountChoice] = useState<number>(10);
 
   // Session state
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -57,64 +82,306 @@ export const Practice: React.FC<PracticeProps> = ({
   const [isSessionFinished, setIsSessionFinished] = useState(false);
 
   // Generate question deck based on mode
-  const generateQuestions = (mode: PracticeMode, pool: VocabularyWord[]) => {
-    if (pool.length < 4) {
-      toast.error('Mashq uchun kamida 4 ta so\'z kerak.');
-      return;
+  const generateQuestions = (mode: PracticeMode, countLimit: number = questionCountChoice) => {
+    const irregularVerbs = Storage.getIrregularVerbs();
+    const allV2s = irregularVerbs.map((v) => v.v2);
+    const allV3s = irregularVerbs.map((v) => v.v3);
+
+    let generated: Question[] = [];
+
+    if (mode === 'past_simple_verbs') {
+      if (irregularVerbs.length < 4) {
+        toast.error("Mashq uchun kamida 4 ta fe'l kerak.");
+        return;
+      }
+      const shuffled = [...irregularVerbs].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, countLimit);
+      generated = selected.map((target) => {
+        const others = irregularVerbs
+          .filter((v) => v.id !== target.id)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const options = [target.v2, ...others.map((o) => o.v2)].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: 'Past Simple (V2) shaklini tanlang',
+          promptText: target.v1,
+          subPrompt: target.translation,
+          options,
+          correctOption: target.v2,
+          modeType: 'mc',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+          grammarTip: `"${target.v1}" fe'lining Past Simple (o'tgan zamon) shakli: "${target.v2}".`,
+        };
+      });
+    } else if (mode === 'past_simple_sentences') {
+      const templates = [...PAST_SIMPLE_SENTENCE_TEMPLATES].sort(() => 0.5 - Math.random()).slice(0, countLimit);
+      generated = templates.map((tmpl) => {
+        const matchingVerb = irregularVerbs.find((v) => v.id === tmpl.verbId);
+        const distractors = allV2s
+          .filter((v) => v.toLowerCase() !== tmpl.correct.toLowerCase())
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const options = [tmpl.correct, ...distractors].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: "Gapdagi bo'sh joyni Past Simple (V2) shakli bilan to'ldiring",
+          promptText: tmpl.sentence.replace('{gap}', '______'),
+          subPrompt: tmpl.translationUz,
+          options,
+          correctOption: tmpl.correct,
+          modeType: 'mc',
+          verbDetails: matchingVerb
+            ? {
+                v1: matchingVerb.v1,
+                v2: matchingVerb.v2,
+                v3: matchingVerb.v3,
+                translation: matchingVerb.translation,
+                pronunciation: matchingVerb.pronunciation,
+              }
+            : undefined,
+          grammarTip: `O'tgan zamon darak gapida fe'lning 2-shakli (V2: "${tmpl.correct}") ishlatiladi.`,
+        };
+      });
+    } else if (mode === 'past_simple_typing') {
+      // MODE: Type the V2 without multiple choice hints
+      const shuffled = [...irregularVerbs].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, countLimit);
+      generated = selected.map((target) => {
+        // Build accepted list (e.g. was, were, was / were)
+        const accepted = [target.v2.toLowerCase().trim()];
+        if (target.v2.includes('/')) {
+          target.v2.split('/').forEach((part) => accepted.push(part.trim().toLowerCase()));
+        }
+        return {
+          promptTitle: 'Past Simple (V2) shaklini yozing (Spelling)',
+          promptText: target.v1,
+          subPrompt: `🇺🇿 ${target.translation}`,
+          correctOption: target.v2,
+          acceptedAnswers: accepted,
+          modeType: 'typing',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+          grammarTip: `"${target.v1}" fe'lining Past Simple shakli: "${target.v2}".`,
+        };
+      });
+    } else if (mode === 'past_simple_negative_questions') {
+      // MODE: didn't + V1 or Did + subject + V1
+      const pool = [...PAST_SIMPLE_NEGATIVE_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, countLimit);
+      generated = pool.map((item) => {
+        // Generate believable distractors based on the question
+        let distractors: string[] = [];
+        if (item.correctAnswer.startsWith("didn't ")) {
+          const verbBase = item.correctAnswer.replace("didn't ", '');
+          const match = irregularVerbs.find((v) => v.v1.toLowerCase() === verbBase.toLowerCase());
+          const pastV2 = match ? match.v2 : verbBase + 'ed';
+          distractors = [`didn't ${pastV2}`, `not ${pastV2}`, `wasn't ${verbBase}`];
+        } else if (item.correctAnswer.startsWith('Did ')) {
+          const verbBase = item.correctAnswer.replace('Did ', '');
+          const match = irregularVerbs.find((v) => v.v1.toLowerCase() === verbBase.toLowerCase());
+          const pastV2 = match ? match.v2 : verbBase + 'ed';
+          distractors = [`Did ${pastV2}`, `Were ${verbBase}`, `Have ${pastV2}`];
+        } else {
+          distractors = ['was not', 'did went', 'had been'];
+        }
+
+        const options = [item.correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
+
+        return {
+          promptTitle: "Past Simple: Inkor va So'roq qoidasi",
+          promptText: item.prompt,
+          subPrompt: "Diqqat: didn't yoki Did bo'lsa, asosiy fe'l qaysi shaklda keladi?",
+          options,
+          correctOption: item.correctAnswer,
+          modeType: 'mc',
+          grammarTip: item.ruleExplanationUz,
+        };
+      });
+    } else if (mode === 'complete_three_forms') {
+      // MODE: Complete 3 forms (V1 → V2 → V3)
+      const shuffled = [...irregularVerbs].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, countLimit);
+      generated = selected.map((target, idx) => {
+        // Alternating missing slot: V3 missing or V2 missing
+        const isV3Missing = idx % 2 === 0;
+        let prompt = '';
+        let correct = '';
+        let options: string[] = [];
+
+        if (isV3Missing) {
+          prompt = `${target.v1}  →  ${target.v2}  →  ______`;
+          correct = target.v3;
+          const distractors = allV3s
+            .filter((v) => v.toLowerCase() !== correct.toLowerCase())
+            .sort(() => 0.5 - Math.random())
+            .slice(0, 3);
+          options = [correct, ...distractors].sort(() => 0.5 - Math.random());
+        } else {
+          prompt = `${target.v1}  →  ______  →  ${target.v3}`;
+          correct = target.v2;
+          const distractors = allV2s
+            .filter((v) => v.toLowerCase() !== correct.toLowerCase())
+            .sort(() => 0.5 - Math.random())
+            .slice(0, 3);
+          options = [correct, ...distractors].sort(() => 0.5 - Math.random());
+        }
+
+        return {
+          promptTitle: "Noto'g'ri fe'lning 3 ta shaklini to'ldiring",
+          promptText: prompt,
+          subPrompt: `Ma'nosi: ${target.translation}`,
+          options,
+          correctOption: correct,
+          modeType: 'mc',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+          grammarTip: `To'liq shakllar: V1: ${target.v1} | V2: ${target.v2} | V3: ${target.v3}`,
+        };
+      });
+    } else if (mode === 'past_simple_audio') {
+      // MODE: Listen to V2 pronunciation and pick correct verb & meaning
+      const shuffled = [...irregularVerbs].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, countLimit);
+      generated = selected.map((target) => {
+        const others = irregularVerbs
+          .filter((v) => v.id !== target.id)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const correctText = `${target.v2} (${target.v1} — ${target.translation})`;
+        const options = [
+          correctText,
+          ...others.map((o) => `${o.v2} (${o.v1} — ${o.translation})`),
+        ].sort(() => 0.5 - Math.random());
+
+        return {
+          promptTitle: "Ovozni eshiting va to'g'ri Past Simple fe'lini toping",
+          promptText: '🔊 Talaffuzni eshiting',
+          subPrompt: "Past Simple shakli quloqqa qanday eshitilyapti?",
+          options,
+          correctOption: correctText,
+          audioWord: target.v2,
+          modeType: 'audio',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+          grammarTip: `Tinglangan so'z: "${target.v2}" (V1: ${target.v1} — ${target.translation}).`,
+        };
+      });
+    } else if (mode === 'past_simple_super_mix') {
+      // MODE: Mega mix of all Past Simple exercise formats!
+      const subModes: PracticeMode[] = [
+        'past_simple_verbs',
+        'past_simple_sentences',
+        'past_simple_typing',
+        'past_simple_negative_questions',
+        'complete_three_forms',
+        'past_simple_audio',
+      ];
+      const mixDeck: Question[] = [];
+      const perModeCount = Math.max(2, Math.ceil(countLimit / subModes.length));
+
+      subModes.forEach((sm) => {
+        // generate a few questions for each
+        const subList = generateSingleModeQuestions(sm, perModeCount, irregularVerbs);
+        mixDeck.push(...subList);
+      });
+
+      const shuffledMix = mixDeck.sort(() => 0.5 - Math.random()).slice(0, countLimit);
+      generated = shuffledMix;
+    } else {
+      // Standard vocabulary modes
+      if (words.length < 4) {
+        toast.error("Lug'at rejimlari uchun kamida 4 ta so'z kerak. Quyidagi Past Simple rejimlaridan foydalanishingiz mumkin!");
+        return;
+      }
+
+      const shuffledWords = [...words].sort(() => 0.5 - Math.random());
+      const count = Math.min(countLimit, words.length);
+      const sessionItems = shuffledWords.slice(0, count);
+
+      generated = sessionItems.map((target) => {
+        const otherWords = words.filter((w) => w.id !== target.id);
+        const distractors = otherWords.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+        if (mode === 'multiple_choice') {
+          const options = [target.translation, ...distractors.map((d) => d.translation)].sort(
+            () => 0.5 - Math.random()
+          );
+          return {
+            targetWord: target,
+            promptTitle: "To'g'ri tarjimani tanlang",
+            options,
+            correctOption: target.translation,
+            modeType: 'mc',
+          };
+        } else if (mode === 'uzbek_to_english') {
+          const options = [target.word, ...distractors.map((d) => d.word)].sort(
+            () => 0.5 - Math.random()
+          );
+          return {
+            targetWord: target,
+            promptTitle: "Inglizcha so'zni toping",
+            options,
+            correctOption: target.word,
+            modeType: 'mc',
+          };
+        } else if (mode === 'true_false') {
+          const isTrue = Math.random() > 0.5;
+          const shownTranslation = isTrue ? target.translation : distractors[0].translation;
+          return {
+            targetWord: target,
+            promptTitle: 'Bu tarjima to‘g‘rimi?',
+            isTrueStatement: isTrue,
+            statementTranslation: shownTranslation,
+            modeType: 'tf',
+          };
+        } else if (mode === 'listening') {
+          const options = [target.word, ...distractors.map((d) => d.word)].sort(
+            () => 0.5 - Math.random()
+          );
+          return {
+            targetWord: target,
+            promptTitle: "Eshiting va to'g'ri so'zni tanlang",
+            options,
+            correctOption: target.word,
+            audioWord: target.word,
+            modeType: 'audio',
+          };
+        } else {
+          // type_answer
+          return {
+            targetWord: target,
+            promptTitle: "Inglizcha so'zni yozing (Spelling)",
+            correctOption: target.word,
+            acceptedAnswers: [target.word.toLowerCase().trim()],
+            modeType: 'typing',
+          };
+        }
+      });
     }
 
-    const shuffledWords = [...pool].sort(() => 0.5 - Math.random());
-    const count = Math.min(10, pool.length);
-    const sessionItems = shuffledWords.slice(0, count);
-
-    const generated: Question[] = sessionItems.map((target) => {
-      // Pick 3 random distractor words
-      const otherWords = pool.filter((w) => w.id !== target.id);
-      const distractors = otherWords.sort(() => 0.5 - Math.random()).slice(0, 3);
-
-      if (mode === 'multiple_choice') {
-        const options = [target.translation, ...distractors.map((d) => d.translation)].sort(
-          () => 0.5 - Math.random()
-        );
-        return {
-          targetWord: target,
-          options,
-          correctOption: target.translation,
-        };
-      } else if (mode === 'uzbek_to_english') {
-        const options = [target.word, ...distractors.map((d) => d.word)].sort(
-          () => 0.5 - Math.random()
-        );
-        return {
-          targetWord: target,
-          options,
-          correctOption: target.word,
-        };
-      } else if (mode === 'true_false') {
-        const isTrue = Math.random() > 0.5;
-        const shownTranslation = isTrue ? target.translation : distractors[0].translation;
-        return {
-          targetWord: target,
-          isTrueStatement: isTrue,
-          statementTranslation: shownTranslation,
-        };
-      } else if (mode === 'listening') {
-        const options = [target.word, ...distractors.map((d) => d.word)].sort(
-          () => 0.5 - Math.random()
-        );
-        return {
-          targetWord: target,
-          options,
-          correctOption: target.word,
-        };
-      } else {
-        // type_answer
-        return {
-          targetWord: target,
-          correctOption: target.word.toLowerCase().trim(),
-        };
-      }
-    });
+    if (generated.length === 0) {
+      toast.error('Savollar yaratishda xatolik yuz berdi.');
+      return;
+    }
 
     setQuestions(generated);
     setCurrentIndex(0);
@@ -127,22 +394,191 @@ export const Practice: React.FC<PracticeProps> = ({
     setIsSessionFinished(false);
     setIsPlaying(true);
 
-    // If listening mode, automatically pronounce the first word
-    if (mode === 'listening' && generated[0]) {
+    // Auto-pronounce if first question is audio
+    if (generated[0]?.audioWord) {
       setTimeout(() => {
-        speakWord(generated[0].targetWord.word);
-      }, 300);
+        speakWord(generated[0].audioWord!);
+      }, 350);
+    }
+  };
+
+  // Helper for super mix
+  const generateSingleModeQuestions = (
+    mode: PracticeMode,
+    limit: number,
+    irregularVerbs: IrregularVerb[]
+  ): Question[] => {
+    const allV2s = irregularVerbs.map((v) => v.v2);
+    const allV3s = irregularVerbs.map((v) => v.v3);
+
+    if (mode === 'past_simple_verbs') {
+      const selected = [...irregularVerbs].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return selected.map((target) => {
+        const others = irregularVerbs
+          .filter((v) => v.id !== target.id)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const options = [target.v2, ...others.map((o) => o.v2)].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: 'Past Simple (V2) shaklini tanlang',
+          promptText: target.v1,
+          subPrompt: target.translation,
+          options,
+          correctOption: target.v2,
+          modeType: 'mc',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+          grammarTip: `"${target.v1}" fe'lining Past Simple shakli: "${target.v2}".`,
+        };
+      });
+    } else if (mode === 'past_simple_sentences') {
+      const templates = [...PAST_SIMPLE_SENTENCE_TEMPLATES].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return templates.map((tmpl) => {
+        const matchingVerb = irregularVerbs.find((v) => v.id === tmpl.verbId);
+        const distractors = allV2s
+          .filter((v) => v.toLowerCase() !== tmpl.correct.toLowerCase())
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const options = [tmpl.correct, ...distractors].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: "Gapdagi bo'sh joyni Past Simple (V2) shakli bilan to'ldiring",
+          promptText: tmpl.sentence.replace('{gap}', '______'),
+          subPrompt: tmpl.translationUz,
+          options,
+          correctOption: tmpl.correct,
+          modeType: 'mc',
+          verbDetails: matchingVerb
+            ? {
+                v1: matchingVerb.v1,
+                v2: matchingVerb.v2,
+                v3: matchingVerb.v3,
+                translation: matchingVerb.translation,
+                pronunciation: matchingVerb.pronunciation,
+              }
+            : undefined,
+          grammarTip: `Gapda o'tgan zamon uchun: "${tmpl.correct}" (V2).`,
+        };
+      });
+    } else if (mode === 'past_simple_typing') {
+      const selected = [...irregularVerbs].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return selected.map((target) => {
+        const accepted = [target.v2.toLowerCase().trim()];
+        if (target.v2.includes('/')) {
+          target.v2.split('/').forEach((part) => accepted.push(part.trim().toLowerCase()));
+        }
+        return {
+          promptTitle: 'Past Simple (V2) shaklini yozing',
+          promptText: target.v1,
+          subPrompt: `🇺🇿 ${target.translation}`,
+          correctOption: target.v2,
+          acceptedAnswers: accepted,
+          modeType: 'typing',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+        };
+      });
+    } else if (mode === 'past_simple_negative_questions') {
+      const pool = [...PAST_SIMPLE_NEGATIVE_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return pool.map((item) => {
+        let distractors: string[] = [];
+        if (item.correctAnswer.startsWith("didn't ")) {
+          const verbBase = item.correctAnswer.replace("didn't ", '');
+          const match = irregularVerbs.find((v) => v.v1.toLowerCase() === verbBase.toLowerCase());
+          const pastV2 = match ? match.v2 : verbBase + 'ed';
+          distractors = [`didn't ${pastV2}`, `not ${pastV2}`, `wasn't ${verbBase}`];
+        } else {
+          const verbBase = item.correctAnswer.replace('Did ', '');
+          const match = irregularVerbs.find((v) => v.v1.toLowerCase() === verbBase.toLowerCase());
+          const pastV2 = match ? match.v2 : verbBase + 'ed';
+          distractors = [`Did ${pastV2}`, `Were ${verbBase}`, `Have ${pastV2}`];
+        }
+        const options = [item.correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: "Past Simple: Inkor va So'roq qoidasi",
+          promptText: item.prompt,
+          subPrompt: "Qoida: didn't yoki Did bilan asosiy fe'l V1 shaklda bo'ladi",
+          options,
+          correctOption: item.correctAnswer,
+          modeType: 'mc',
+          grammarTip: item.ruleExplanationUz,
+        };
+      });
+    } else if (mode === 'complete_three_forms') {
+      const selected = [...irregularVerbs].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return selected.map((target) => {
+        const prompt = `${target.v1}  →  ${target.v2}  →  ______`;
+        const correct = target.v3;
+        const distractors = allV3s
+          .filter((v) => v.toLowerCase() !== correct.toLowerCase())
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const options = [correct, ...distractors].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: "3-shakl (Past Participle V3)ni to'ldiring",
+          promptText: prompt,
+          subPrompt: `Ma'nosi: ${target.translation}`,
+          options,
+          correctOption: correct,
+          modeType: 'mc',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+        };
+      });
+    } else {
+      // past_simple_audio
+      const selected = [...irregularVerbs].sort(() => 0.5 - Math.random()).slice(0, limit);
+      return selected.map((target) => {
+        const others = irregularVerbs
+          .filter((v) => v.id !== target.id)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+        const correctText = `${target.v2} (${target.v1} — ${target.translation})`;
+        const options = [
+          correctText,
+          ...others.map((o) => `${o.v2} (${o.v1} — ${o.translation})`),
+        ].sort(() => 0.5 - Math.random());
+        return {
+          promptTitle: "Ovozni eshiting va mos Past Simple fe'lini toping",
+          promptText: '🔊 Talaffuzni eshiting',
+          options,
+          correctOption: correctText,
+          audioWord: target.v2,
+          modeType: 'audio',
+          verbDetails: {
+            v1: target.v1,
+            v2: target.v2,
+            v3: target.v3,
+            translation: target.translation,
+            pronunciation: target.pronunciation,
+          },
+        };
+      });
     }
   };
 
   const currentQ = questions[currentIndex];
 
-  // Auto pronounce in listening mode on step change
+  // Auto pronounce in audio modes on step change
   useEffect(() => {
-    if (isPlaying && selectedMode === 'listening' && currentQ) {
-      speakWord(currentQ.targetWord.word);
+    if (isPlaying && currentQ?.audioWord) {
+      speakWord(currentQ.audioWord);
     }
-  }, [currentIndex, isPlaying, selectedMode]);
+  }, [currentIndex, isPlaying]);
 
   // Handle Option Selection
   const handleSelectOption = (option: string) => {
@@ -152,7 +588,7 @@ export const Practice: React.FC<PracticeProps> = ({
     setIsAnswerSubmitted(true);
 
     let correct = false;
-    if (selectedMode === 'true_false') {
+    if (currentQ.modeType === 'tf') {
       const chosenBool = option === 'true';
       correct = chosenBool === currentQ.isTrueStatement;
     } else {
@@ -163,8 +599,9 @@ export const Practice: React.FC<PracticeProps> = ({
     if (correct) {
       setScore((s) => s + 1);
       setStreakInSession((s) => s + 1);
-      // Give feedback sound/pronunciation
-      speakWord(currentQ.targetWord.word);
+      const wordToSpeak =
+        currentQ.verbDetails?.v2 || currentQ.targetWord?.word || currentQ.correctOption;
+      if (wordToSpeak) speakWord(wordToSpeak);
     } else {
       setStreakInSession(0);
     }
@@ -177,15 +614,26 @@ export const Practice: React.FC<PracticeProps> = ({
 
     setIsAnswerSubmitted(true);
     const cleanTyped = typedAnswer.toLowerCase().trim();
-    const cleanTarget = currentQ.targetWord.word.toLowerCase().trim();
 
-    const correct = cleanTyped === cleanTarget;
+    let correct = false;
+    if (currentQ.acceptedAnswers && currentQ.acceptedAnswers.length > 0) {
+      correct = currentQ.acceptedAnswers.some(
+        (ans) => ans.toLowerCase().trim() === cleanTyped
+      );
+    } else {
+      const cleanTarget = (currentQ.targetWord?.word || currentQ.correctOption || '')
+        .toLowerCase()
+        .trim();
+      correct = cleanTyped === cleanTarget;
+    }
+
     setIsCorrect(correct);
 
     if (correct) {
       setScore((s) => s + 1);
       setStreakInSession((s) => s + 1);
-      speakWord(currentQ.targetWord.word);
+      const toSpeak = currentQ.verbDetails?.v2 || currentQ.correctOption || cleanTyped;
+      speakWord(toSpeak);
     } else {
       setStreakInSession(0);
     }
@@ -203,7 +651,7 @@ export const Practice: React.FC<PracticeProps> = ({
       // Finish Session
       setIsSessionFinished(true);
       const total = questions.length;
-      const finalScore = isCorrect ? score : score; // already updated
+      const finalScore = isCorrect ? score : score;
       const accuracy = Math.round((finalScore / total) * 100);
 
       Storage.savePracticeSession({
@@ -216,108 +664,238 @@ export const Practice: React.FC<PracticeProps> = ({
     }
   };
 
-  if (words.length < 4) {
-    return (
-      <div className="max-w-2xl mx-auto text-center py-16 space-y-6">
-        <div className="w-20 h-20 rounded-3xl bg-amber-400/10 border border-amber-400/20 text-amber-300 flex items-center justify-center mx-auto shadow-2xl">
-          <Dumbbell className="w-10 h-10" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-white">So'zlar yetarli emas</h2>
-          <p className="text-slate-400 text-sm">
-            Mashq qilish uchun kutubxonangizda kamida 4 ta so'z bo'lishi kerak.
-          </p>
-        </div>
-        <button
-          onClick={() => onNavigate('import')}
-          className="px-6 py-3 rounded-2xl bg-amber-400 text-slate-950 font-bold text-sm shadow-xl hover:bg-amber-300 transition-all"
-        >
-          Rasm orqali so'z yuklash
-        </button>
-      </div>
-    );
-  }
+  // Keyboard shortcut listener for Enter
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && isAnswerSubmitted && !isSessionFinished) {
+        handleNextQuestion();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAnswerSubmitted, currentIndex, questions.length, isSessionFinished]);
+
+  // Mode catalog with badges and categories
+  const practiceModesCatalog = [
+    // Past Simple & Irregular Verbs
+    {
+      id: 'past_simple_verbs' as PracticeMode,
+      title: 'Past Simple: V1 → V2 Test',
+      desc: 'Noto‘g‘ri fe‘llarning o‘tgan zamon (V2) shaklini variantlardan topish.',
+      badge: 'V1 → V2',
+      isPast: true,
+      tag: 'Ommabop',
+      color: 'from-amber-500/20 to-amber-600/5 border-amber-500/30 text-amber-300',
+    },
+    {
+      id: 'past_simple_sentences' as PracticeMode,
+      title: 'Past Simple: Gaplarda ishlatish',
+      desc: 'Haqiqiy kontekstli gaplarda bo‘sh o‘ringa to‘g‘ri Past Simple shaklini qo‘yish.',
+      badge: 'Gaplar',
+      isPast: true,
+      tag: 'Kontekst',
+      color: 'from-blue-500/20 to-blue-600/5 border-blue-500/30 text-blue-300',
+    },
+    {
+      id: 'past_simple_typing' as PracticeMode,
+      title: 'Past Simple: V2 ni Yozish (Spelling)',
+      desc: 'Hech qanday variantlarsiz V2 shaklini klaviaturada to‘g‘ri yozing.',
+      badge: 'Yozish',
+      isPast: true,
+      tag: 'Faol xotira',
+      color: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-300',
+    },
+    {
+      id: 'past_simple_negative_questions' as PracticeMode,
+      title: "Past Simple: Inkor va Savol (didn't / Did)",
+      desc: "didn't + V1 va Did you + V1 qoidasini mustahkamlovchi maxsus grammatik test.",
+      badge: "didn't / Did",
+      isPast: true,
+      tag: 'Grammatika',
+      color: 'from-purple-500/20 to-purple-600/5 border-purple-500/30 text-purple-300',
+    },
+    {
+      id: 'complete_three_forms' as PracticeMode,
+      title: '3 ta shaklni to‘ldirish (V1 → V2 → V3)',
+      desc: 'begin → began → ______ zanjiridagi yetishmayotgan shaklni to‘ldirish.',
+      badge: '3 Shakl',
+      isPast: true,
+      tag: 'Zanjir',
+      color: 'from-orange-500/20 to-orange-600/5 border-orange-500/30 text-orange-300',
+    },
+    {
+      id: 'past_simple_audio' as PracticeMode,
+      title: 'Past Simple: Audio Challenge',
+      desc: 'O‘tgan zamon fe‘lining talaffuzini eshiting va to‘g‘ri fe‘lni aniqlang.',
+      badge: 'Audio',
+      isPast: true,
+      tag: 'Eshitish',
+      color: 'from-cyan-500/20 to-cyan-600/5 border-cyan-500/30 text-cyan-300',
+    },
+    {
+      id: 'past_simple_super_mix' as PracticeMode,
+      title: 'Past Simple: Super Mega Mix',
+      desc: 'Barcha Past Simple rejimlarini (gaplar, yozish, inkor, 3-shakl, audio) aralash tarzda sinash.',
+      badge: 'Mega Mix',
+      isPast: true,
+      tag: 'Barchasi',
+      color: 'from-rose-500/20 to-rose-600/5 border-rose-500/30 text-rose-300',
+    },
+
+    // Vocabulary Modes
+    {
+      id: 'multiple_choice' as PracticeMode,
+      title: 'Lug‘at: Multiple Choice',
+      desc: 'Inglizcha so‘z beriladi, 4 ta o‘zbekcha variantdan to‘g‘risini tanlang.',
+      badge: 'Klassik',
+      isPast: false,
+      tag: 'Lug‘at',
+      color: 'from-slate-800 to-slate-900 border-white/10 text-slate-300',
+    },
+    {
+      id: 'uzbek_to_english' as PracticeMode,
+      title: 'Lug‘at: Uzbek → English',
+      desc: 'O‘zbekcha ma‘nosi beriladi, to‘g‘ri inglizcha so‘zni toping.',
+      badge: 'Tarjima',
+      isPast: false,
+      tag: 'Lug‘at',
+      color: 'from-slate-800 to-slate-900 border-white/10 text-slate-300',
+    },
+    {
+      id: 'type_answer' as PracticeMode,
+      title: 'Lug‘at: Type the Answer',
+      desc: 'So‘zni klaviaturada yozing. To‘g‘ri yozilish (spelling) mashqi.',
+      badge: 'Spelling',
+      isPast: false,
+      tag: 'Lug‘at',
+      color: 'from-slate-800 to-slate-900 border-white/10 text-slate-300',
+    },
+    {
+      id: 'true_false' as PracticeMode,
+      title: 'Lug‘at: True / False',
+      desc: 'So‘z va tarjima juftligi to‘g‘rimi yoki noto‘g‘ri? Tezkor test.',
+      badge: 'Tezkor',
+      isPast: false,
+      tag: 'Lug‘at',
+      color: 'from-slate-800 to-slate-900 border-white/10 text-slate-300',
+    },
+    {
+      id: 'listening' as PracticeMode,
+      title: 'Lug‘at: Listening Audio',
+      desc: 'Talaffuzni eshiting va mos so‘zni toping.',
+      badge: 'Audio',
+      isPast: false,
+      tag: 'Lug‘at',
+      color: 'from-slate-800 to-slate-900 border-white/10 text-slate-300',
+    },
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       {/* Header */}
       {!isPlaying && (
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-300 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Interactive Learning Modes</span>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-300 text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Interactive English Practice Hub</span>
+            </div>
+
+            {/* Question count selector */}
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-white/10 p-1 rounded-xl text-xs">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 ml-2" />
+              <span className="text-slate-400 font-medium">Savollar soni:</span>
+              {[10, 15, 20, 25].map((cnt) => (
+                <button
+                  key={cnt}
+                  type="button"
+                  onClick={() => setQuestionCountChoice(cnt)}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                    questionCountChoice === cnt
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {cnt}
+                </button>
+              ))}
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Vocabulary Practice & Quiz
-          </h1>
-          <p className="text-slate-400 text-sm max-w-2xl">
-            O'rgangan so'zlaringizni 5 xil interaktiv rejimda sinovdan o'tkazing va xotirangizni mustahkamlang.
-          </p>
+
+          <div>
+            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Past Simple & Lug‘at Mashqlari
+            </h1>
+            <p className="text-slate-400 text-sm max-w-2xl mt-1.5 leading-relaxed">
+              Noto‘g‘ri fe‘llar, Past Simple zamoni (darak, inkor, so‘roq gaplar) va so‘z boyligini
+              interaktiv usulda mustahkamlang.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Category filter tabs */}
+      {!isPlaying && (
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+          {[
+            { id: 'past_simple', label: '⚡ Past Simple & Fe‘llar (7 ta rejim)' },
+            { id: 'all', label: 'Barcha rejimlar (12 ta)' },
+            { id: 'vocab', label: '📚 Lug‘at rejimlari (5 ta)' },
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id as any)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                activeCategory === cat.id
+                  ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20'
+                  : 'bg-slate-900 border border-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
       )}
 
       {/* Mode Selection Cards */}
       {!isPlaying ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            {
-              id: 'multiple_choice' as PracticeMode,
-              title: 'Mode 1: Multiple Choice',
-              desc: 'Inglizcha so\'z beriladi, 4 ta o\'zbekcha variantdan to\'g\'risini tanlang.',
-              badge: 'Klassik',
-            },
-            {
-              id: 'uzbek_to_english' as PracticeMode,
-              title: 'Mode 2: Uzbek → English',
-              desc: 'O\'zbekcha ma\'nosi beriladi, to\'g\'ri inglizcha so\'zni toping.',
-              badge: 'Tarjima',
-            },
-            {
-              id: 'type_answer' as PracticeMode,
-              title: 'Mode 3: Type the answer',
-              desc: 'So\'zni klaviaturada yozing. To\'g\'ri yozilish (spelling) mashqi.',
-              badge: 'Spelling',
-            },
-            {
-              id: 'true_false' as PracticeMode,
-              title: 'Mode 4: True / False',
-              desc: 'So\'z va tarjima juftligi to\'g\'rimi yoki noto\'g\'ri? Tezkor qaror qabul qiling.',
-              badge: 'Tezkor',
-            },
-            {
-              id: 'listening' as PracticeMode,
-              title: 'Mode 5: Listening Audio',
-              desc: 'Pronunciation (talaffuz)ni eshiting va mos so\'zni toping.',
-              badge: 'Audio',
-            },
-          ].map((mode) => (
-            <div
-              key={mode.id}
-              onClick={() => {
-                setSelectedMode(mode.id);
-                generateQuestions(mode.id, words);
-              }}
-              className="group p-6 rounded-2xl bg-[#0d1322] border border-white/5 hover:border-amber-400/40 cursor-pointer transition-all hover:-translate-y-1 shadow-xl flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/20">
-                    {mode.badge}
-                  </span>
-                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
+          {practiceModesCatalog
+            .filter((m) => {
+              if (activeCategory === 'past_simple') return m.isPast;
+              if (activeCategory === 'vocab') return !m.isPast;
+              return true;
+            })
+            .map((mode) => (
+              <div
+                key={mode.id}
+                onClick={() => {
+                  setSelectedMode(mode.id);
+                  generateQuestions(mode.id, questionCountChoice);
+                }}
+                className={`group p-6 rounded-2xl bg-gradient-to-br ${mode.color} border hover:border-amber-400/50 cursor-pointer transition-all hover:-translate-y-1 shadow-xl flex flex-col justify-between`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-900/80 border border-white/10 text-white">
+                      {mode.badge}
+                    </span>
+                    <span className="text-[10px] text-amber-400/90 font-medium">
+                      {mode.tag}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors mb-2">
+                    {mode.title}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">{mode.desc}</p>
                 </div>
-                <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors mb-2">
-                  {mode.title}
-                </h3>
-                <p className="text-xs text-slate-400 leading-relaxed">{mode.desc}</p>
-              </div>
 
-              <div className="mt-5 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-amber-400 font-semibold">
-                <span>Boshlash &rarr;</span>
-                <span className="text-slate-500 font-normal">10 ta savol</span>
+                <div className="mt-5 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-amber-400 font-semibold">
+                  <span>Boshlash &rarr;</span>
+                  <span className="text-slate-500 font-normal">{questionCountChoice} ta savol</span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       ) : isSessionFinished ? (
         // SESSION SUMMARY RESULTS
@@ -327,21 +905,23 @@ export const Practice: React.FC<PracticeProps> = ({
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-2xl sm:text-3xl font-black text-white">Natijangiz</h3>
+            <h3 className="text-2xl sm:text-3xl font-black text-white">Ajoyib Natija!</h3>
             <p className="text-slate-300 text-sm">
-              Siz <strong>{questions.length}</strong> ta savoldan <strong>{score}</strong> tasiga to'g'ri javob berdingiz.
+              Siz <strong>{questions.length}</strong> ta savoldan{' '}
+              <strong className="text-emerald-400 font-bold">{score}</strong> tasiga to‘g‘ri javob
+              berdingiz.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 py-3">
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-white/5">
-              <span className="text-xs text-slate-400 block mb-1">To'g'rilik (Accuracy)</span>
+              <span className="text-xs text-slate-400 block mb-1">To‘g‘rilik (Accuracy)</span>
               <span className="text-2xl font-black text-amber-300">
                 {Math.round((score / questions.length) * 100)}%
               </span>
             </div>
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-white/5">
-              <span className="text-xs text-slate-400 block mb-1">To'plangan ball</span>
+              <span className="text-xs text-slate-400 block mb-1">To‘plangan ball</span>
               <span className="text-2xl font-black text-emerald-400">
                 {score} / {questions.length}
               </span>
@@ -350,7 +930,7 @@ export const Practice: React.FC<PracticeProps> = ({
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
-              onClick={() => generateQuestions(selectedMode, words)}
+              onClick={() => generateQuestions(selectedMode, questionCountChoice)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm hover:bg-amber-300 transition-all shadow-lg shadow-amber-400/20"
             >
               <RotateCcw className="w-4 h-4" />
@@ -370,101 +950,97 @@ export const Practice: React.FC<PracticeProps> = ({
         currentQ && (
           <div className="space-y-6">
             {/* Quiz Top Status */}
-            <div className="flex items-center justify-between text-xs text-slate-400 pb-2">
+            <div className="flex items-center justify-between text-xs text-slate-400 pb-1">
               <button
                 onClick={() => setIsPlaying(false)}
-                className="hover:text-white transition-colors"
+                className="hover:text-white transition-colors flex items-center gap-1 font-semibold"
               >
-                &larr; Rejimni o'zgartirish
+                &larr; Boshqa rejim tanlash
               </button>
 
               <div className="flex items-center gap-4">
                 <span>
-                  Savol: <strong className="text-white">{currentIndex + 1}</strong> / {questions.length}
+                  Savol: <strong className="text-white">{currentIndex + 1}</strong> /{' '}
+                  {questions.length}
                 </span>
-                <span className="text-amber-400 font-bold">
+                <span className="text-amber-400 font-bold flex items-center gap-1">
+                  <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                   Ball: {score}
                 </span>
               </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 transition-all duration-300"
                 style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
               />
             </div>
 
             {/* Question Card */}
-            <div className="rounded-3xl bg-[#0d1322] border border-white/10 p-6 sm:p-10 shadow-2xl space-y-8">
-              {/* Question Prompt */}
+            <div className="rounded-3xl bg-[#0d1322] border border-white/10 p-6 sm:p-10 shadow-2xl space-y-7">
+              {/* Question Header & Prompt */}
               <div className="text-center space-y-3">
-                <span className="text-xs uppercase font-semibold text-slate-500 tracking-wider">
-                  {selectedMode === 'multiple_choice' && 'To\'g\'ri tarjimani tanlang'}
-                  {selectedMode === 'uzbek_to_english' && 'Inglizcha so\'zni toping'}
-                  {selectedMode === 'type_answer' && 'Inglizcha so\'zni yozing'}
-                  {selectedMode === 'true_false' && 'Bu tarjima to\'g\'rimi?'}
-                  {selectedMode === 'listening' && 'Eshiting va to\'g\'ri so\'zni tanlang'}
+                <span className="inline-block text-xs uppercase font-bold text-amber-400/90 tracking-wider px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20">
+                  {currentQ.promptTitle || 'Past Simple Mashqi'}
                 </span>
 
-                {/* Prompt Display */}
-                {selectedMode === 'listening' ? (
-                  <div className="flex flex-col items-center gap-3 pt-2">
+                {/* Prompt Display based on mode */}
+                {currentQ.modeType === 'audio' ? (
+                  <div className="flex flex-col items-center gap-3 pt-3">
                     <button
                       type="button"
-                      onClick={() => speakWord(currentQ.targetWord.word)}
+                      onClick={() => currentQ.audioWord && speakWord(currentQ.audioWord)}
                       className="w-16 h-16 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-xl shadow-amber-400/25 hover:scale-105 active:scale-95 transition-all"
                       title="Qayta eshitish"
                     >
                       <Volume2 className="w-8 h-8" />
                     </button>
                     <span className="text-xs text-slate-400">
-                      Ovozni qayta eshitish uchun bosing
+                      Talaffuzni qayta eshitish uchun tugmani bosing
                     </span>
-                  </div>
-                ) : selectedMode === 'uzbek_to_english' || selectedMode === 'type_answer' ? (
-                  <div className="space-y-2">
-                    <h2 className="text-2xl sm:text-4xl font-black text-amber-300">
-                      {currentQ.targetWord.translation}
-                    </h2>
-                    {currentQ.targetWord.partOfSpeech && (
-                      <span className="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/5">
-                        {currentQ.targetWord.partOfSpeech}
-                      </span>
+                    {currentQ.subPrompt && (
+                      <p className="text-xs text-amber-300/80 font-medium">
+                        {currentQ.subPrompt}
+                      </p>
                     )}
                   </div>
-                ) : selectedMode === 'true_false' ? (
-                  <div className="space-y-3 pt-2">
-                    <h2 className="text-3xl sm:text-4xl font-black text-white">
-                      {currentQ.targetWord.word}
+                ) : currentQ.promptText ? (
+                  <div className="space-y-2.5 pt-2">
+                    <h2 className="text-2xl sm:text-3xl font-black text-white leading-relaxed">
+                      {currentQ.promptText}
                     </h2>
-                    <div className="text-lg text-slate-300">
-                      = <strong className="text-amber-300">"{currentQ.statementTranslation}"</strong>
-                    </div>
+                    {currentQ.subPrompt && (
+                      <p className="text-sm text-amber-300 font-medium">
+                        {currentQ.subPrompt}
+                      </p>
+                    )}
                   </div>
-                ) : (
+                ) : currentQ.targetWord ? (
                   <div className="space-y-2">
                     <h2 className="text-3xl sm:text-5xl font-black text-white">
                       {currentQ.targetWord.word}
                     </h2>
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => speakWord(currentQ.targetWord.word)}
-                        className="text-slate-500 hover:text-amber-300 p-1"
-                      >
-                        <Volume2 className="w-4 h-4" />
-                      </button>
-                      <span className="font-mono text-slate-400 text-sm">
-                        {currentQ.targetWord.pronunciation}
-                      </span>
-                    </div>
+                    {currentQ.targetWord.pronunciation && (
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => speakWord(currentQ.targetWord!.word)}
+                          className="text-slate-500 hover:text-amber-300 p-1"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </button>
+                        <span className="font-mono text-slate-400 text-sm">
+                          {currentQ.targetWord.pronunciation}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                ) : null}
               </div>
 
               {/* ANSWER OPTIONS / INPUT SECTION */}
-              {selectedMode === 'type_answer' ? (
+              {currentQ.modeType === 'typing' ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -481,7 +1057,7 @@ export const Practice: React.FC<PracticeProps> = ({
                     value={typedAnswer}
                     onChange={(e) => setTypedAnswer(e.target.value)}
                     disabled={isAnswerSubmitted}
-                    placeholder="Type the English word..."
+                    placeholder="V2 (Past Simple) shaklini yozing..."
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"
@@ -506,7 +1082,7 @@ export const Practice: React.FC<PracticeProps> = ({
                     </button>
                   ) : null}
                 </form>
-              ) : selectedMode === 'true_false' ? (
+              ) : currentQ.modeType === 'tf' ? (
                 <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
                   <button
                     onClick={() => handleSelectOption('true')}
@@ -522,7 +1098,7 @@ export const Practice: React.FC<PracticeProps> = ({
                     }`}
                   >
                     <Check className="w-5 h-5 text-emerald-400" />
-                    <span>To'g'ri (True)</span>
+                    <span>To‘g‘ri (True)</span>
                   </button>
 
                   <button
@@ -539,12 +1115,12 @@ export const Practice: React.FC<PracticeProps> = ({
                     }`}
                   >
                     <X className="w-5 h-5 text-rose-400" />
-                    <span>Noto'g'ri (False)</span>
+                    <span>Noto‘g‘ri (False)</span>
                   </button>
                 </div>
               ) : (
-                // Multiple Choice / Uzbek -> English / Listening Options
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-2xl mx-auto">
+                // Multiple Choice Options
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
                   {currentQ.options?.map((option, idx) => {
                     const letters = ['A', 'B', 'C', 'D'];
                     const isSelected = userSelectedAnswer === option;
@@ -569,7 +1145,7 @@ export const Practice: React.FC<PracticeProps> = ({
                         key={idx}
                         onClick={() => handleSelectOption(option)}
                         disabled={isAnswerSubmitted}
-                        className={`group p-4 rounded-2xl border text-left font-semibold text-sm flex items-center gap-3.5 transition-all ${btnStyle} ${
+                        className={`group p-4 rounded-2xl border text-left font-semibold text-sm flex items-center gap-3 transition-all ${btnStyle} ${
                           !isAnswerSubmitted ? 'active:scale-98' : ''
                         }`}
                       >
@@ -591,51 +1167,113 @@ export const Practice: React.FC<PracticeProps> = ({
                 </div>
               )}
 
-              {/* Feedback Alert Bar after answering */}
+              {/* Feedback and Grammar Explanations after answer submission */}
               {isAnswerSubmitted && (
-                <div
-                  className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in ${
-                    isCorrect
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                      : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    {isCorrect ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                    )}
-                    <div>
-                      <div className="font-bold text-sm">
-                        {isCorrect ? '✅ To‘g‘ri!' : '❌ Noto‘g‘ri'}
-                      </div>
-                      {!isCorrect && (
-                        <div className="text-xs text-slate-300 mt-0.5">
-                          To‘g‘ri javob: <strong className="text-amber-300 font-semibold">{currentQ.targetWord.word}</strong>
-                        </div>
+                <div className="space-y-3 animate-in fade-in">
+                  <div
+                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isCorrect
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {isCorrect ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
                       )}
+                      <div>
+                        <div className="font-bold text-sm">
+                          {isCorrect ? '✅ To‘g‘ri javob!' : '❌ Noto‘g‘ri'}
+                        </div>
+                        {!isCorrect && (
+                          <div className="text-xs text-slate-300 mt-0.5">
+                            To‘g‘ri javob:{' '}
+                            <strong className="text-amber-300 font-semibold">
+                              {currentQ.correctOption || currentQ.targetWord?.word}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      {/* Pronounce the correct answer */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const toSpeak =
+                            currentQ.verbDetails?.v2 ||
+                            currentQ.correctOption ||
+                            currentQ.targetWord?.word;
+                          if (toSpeak) speakWord(toSpeak);
+                        }}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-amber-300 transition-colors"
+                        title="Talaffuzni eshitish"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={handleNextQuestion}
+                        className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm hover:bg-amber-300 transition-all shrink-0 active:scale-95 shadow-md flex items-center gap-1.5"
+                      >
+                        <span>
+                          {currentIndex < questions.length - 1
+                            ? 'Keyingisi'
+                            : 'Natijani ko‘rish'}
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5">
-                    {/* Pronounce the correct word upon answer */}
-                    <button
-                      type="button"
-                      onClick={() => speakWord(currentQ.targetWord.word)}
-                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-amber-300 transition-colors"
-                      title="Talaffuzni eshitish"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                    </button>
+                  {/* Verb 3 Forms Details Card */}
+                  {currentQ.verbDetails && (
+                    <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                            V1 (Base)
+                          </span>
+                          <span className="font-bold text-white text-sm">
+                            {currentQ.verbDetails.v1}
+                          </span>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
+                        <div>
+                          <span className="text-[10px] text-amber-400 uppercase font-bold block">
+                            V2 (Past Simple)
+                          </span>
+                          <span className="font-bold text-amber-300 text-sm">
+                            {currentQ.verbDetails.v2}
+                          </span>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                            V3 (Participle)
+                          </span>
+                          <span className="font-bold text-white text-sm">
+                            {currentQ.verbDetails.v3}
+                          </span>
+                        </div>
+                      </div>
 
-                    <button
-                      onClick={handleNextQuestion}
-                      className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm hover:bg-amber-300 transition-all shrink-0 active:scale-95 shadow-md"
-                    >
-                      {currentIndex < questions.length - 1 ? 'Keyingisi \u2192' : 'Natijani ko\'rish'}
-                    </button>
-                  </div>
+                      <div className="text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-xl">
+                        🇺🇿 {currentQ.verbDetails.translation}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grammar Rule Tip */}
+                  {currentQ.grammarTip && (
+                    <div className="p-3 rounded-xl bg-amber-400/5 border border-amber-400/20 text-xs text-amber-200/90 flex items-start gap-2">
+                      <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{currentQ.grammarTip}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

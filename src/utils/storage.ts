@@ -1,8 +1,15 @@
 import { VocabularyWord, UserStats, PracticeSessionRecord, RatingLevel } from '../types/vocabulary';
+import { IrregularVerb } from '../types/irregularVerbs';
+import { INITIAL_IRREGULAR_VERBS } from '../data/irregularVerbsData';
+import { GrammarProgressRecord } from '../types/grammar';
+import { SpeakingResult } from '../types/speaking';
 
 const WORDS_STORAGE_KEY = 'vocabai_words_v1';
 const STATS_STORAGE_KEY = 'vocabai_stats_v1';
 const PRACTICE_STORAGE_KEY = 'vocabai_practice_v1';
+const IRREGULAR_VERBS_KEY = 'vocabai_irregular_verbs_v1';
+const GRAMMAR_PROGRESS_KEY = 'vocabai_grammar_progress_v1';
+const SPEAKING_HISTORY_KEY = 'vocabai_speaking_history_v1';
 
 export const INITIAL_VOCABULARY: VocabularyWord[] = [
   // Preserving user's original 20 words with high-fidelity enrichments
@@ -569,11 +576,7 @@ export const Storage = {
     } else if (rating === 'good') {
       nextIntervalDays = Math.max(3, Math.round((nextIntervalDays || 2) * 1.8));
       item.correctCount = (item.correctCount || 0) + 1;
-      if (item.reviewCount >= 3) {
-        newStatus = 'learned';
-      } else {
-        newStatus = 'learning';
-      }
+      newStatus = 'learned';
     } else if (rating === 'easy') {
       nextIntervalDays = Math.max(6, Math.round((nextIntervalDays || 3) * 2.5));
       item.correctCount = (item.correctCount || 0) + 1;
@@ -720,5 +723,140 @@ export const Storage = {
   resetToDefault(): void {
     localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(INITIAL_VOCABULARY));
     window.dispatchEvent(new Event('vocabai_words_updated'));
+  },
+
+  // ================= Irregular Verbs =================
+  getIrregularVerbs(): IrregularVerb[] {
+    try {
+      const raw = localStorage.getItem(IRREGULAR_VERBS_KEY);
+      if (!raw) {
+        localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+        return INITIAL_IRREGULAR_VERBS;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+        return INITIAL_IRREGULAR_VERBS;
+      }
+      return parsed;
+    } catch (e) {
+      return INITIAL_IRREGULAR_VERBS;
+    }
+  },
+
+  saveIrregularVerbs(verbs: IrregularVerb[]): void {
+    try {
+      localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(verbs));
+      window.dispatchEvent(new Event('vocabai_irregular_verbs_updated'));
+    } catch (e) {
+      console.error('Failed saving irregular verbs:', e);
+    }
+  },
+
+  rateIrregularVerb(id: string, rating: 'again' | 'hard' | 'good' | 'easy'): IrregularVerb | null {
+    const verbs = this.getIrregularVerbs();
+    const item = verbs.find((v) => v.id === id);
+    if (!item) return null;
+
+    item.reviewCount = (item.reviewCount || 0) + 1;
+    item.lastRating = rating;
+    item.lastReviewedAt = new Date().toISOString();
+
+    if (rating === 'again') {
+      item.status = 'difficult';
+      item.intervalDays = 1;
+    } else if (rating === 'hard') {
+      item.status = 'learning';
+      item.intervalDays = 2;
+    } else if (rating === 'good') {
+      item.status = 'learned';
+      item.intervalDays = 4;
+    } else if (rating === 'easy') {
+      item.status = 'learned';
+      item.intervalDays = 7;
+    }
+
+    this.saveIrregularVerbs(verbs);
+    this.incrementReviewedCount();
+    return item;
+  },
+
+  toggleFavoriteIrregularVerb(id: string): boolean {
+    const verbs = this.getIrregularVerbs();
+    const item = verbs.find((v) => v.id === id);
+    if (!item) return false;
+    item.isFavorite = !item.isFavorite;
+    this.saveIrregularVerbs(verbs);
+    return item.isFavorite;
+  },
+
+  markIrregularVerbLearned(id: string, isLearned: boolean): void {
+    const verbs = this.getIrregularVerbs();
+    const item = verbs.find((v) => v.id === id);
+    if (!item) return;
+    item.status = isLearned ? 'learned' : 'learning';
+    this.saveIrregularVerbs(verbs);
+  },
+
+  resetIrregularVerbsToDefault(): void {
+    localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+    window.dispatchEvent(new Event('vocabai_irregular_verbs_updated'));
+  },
+
+  // ================= Grammar Progress =================
+  getGrammarProgress(): Record<string, GrammarProgressRecord> {
+    try {
+      const raw = localStorage.getItem(GRAMMAR_PROGRESS_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw);
+    } catch (e) {
+      return {};
+    }
+  },
+
+  saveGrammarProgress(progress: Record<string, GrammarProgressRecord>): void {
+    try {
+      localStorage.setItem(GRAMMAR_PROGRESS_KEY, JSON.stringify(progress));
+      window.dispatchEvent(new Event('vocabai_grammar_updated'));
+    } catch (e) {
+      console.error('Failed saving grammar progress:', e);
+    }
+  },
+
+  markGrammarCompleted(topicId: string, score: number, totalQuestions: number): void {
+    const progress = this.getGrammarProgress();
+    progress[topicId] = {
+      topicId,
+      completed: true,
+      score,
+      totalQuestions,
+      lastPracticedAt: new Date().toISOString(),
+    };
+    this.saveGrammarProgress(progress);
+    this.incrementReviewedCount();
+  },
+
+  // ================= Speaking History =================
+  getSpeakingHistory(): SpeakingResult[] {
+    try {
+      const raw = localStorage.getItem(SPEAKING_HISTORY_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw);
+    } catch (e) {
+      return [];
+    }
+  },
+
+  saveSpeakingResult(result: SpeakingResult): void {
+    const history = this.getSpeakingHistory();
+    history.unshift(result);
+    if (history.length > 50) history.pop();
+    try {
+      localStorage.setItem(SPEAKING_HISTORY_KEY, JSON.stringify(history));
+      window.dispatchEvent(new Event('vocabai_speaking_updated'));
+    } catch (e) {
+      console.error('Failed saving speaking history:', e);
+    }
+    this.incrementReviewedCount();
   },
 };

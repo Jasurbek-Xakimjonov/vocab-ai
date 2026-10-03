@@ -11,16 +11,27 @@ import { MobileNav } from './components/MobileNav';
 import { Dashboard } from './pages/Dashboard';
 import { ImportVocabulary } from './pages/ImportVocabulary';
 import { Flashcards } from './pages/Flashcards';
+import { IrregularVerbs } from './pages/IrregularVerbs';
+import { Speaking } from './pages/Speaking';
+import { Grammar } from './pages/Grammar';
 import { Practice } from './pages/Practice';
 import { MyWords } from './pages/MyWords';
 import { Progress } from './pages/Progress';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { VocabularyWord, UserStats } from './types/vocabulary';
+import { IrregularVerb } from './types/irregularVerbs';
+import { GrammarTopic } from './types/grammar';
 import { Storage } from './utils/storage';
 
 export function AppContent() {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [words, setWords] = useState<VocabularyWord[]>([]);
   const [stats, setStats] = useState<UserStats>(() => Storage.getUserStats());
+
+  // Global search & deep-link states
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedVerbFromSearch, setSelectedVerbFromSearch] = useState<IrregularVerb | null>(null);
+  const [selectedTopicFromSearch, setSelectedTopicFromSearch] = useState<GrammarTopic | null>(null);
 
   // Refresh words & stats
   const refreshWords = useCallback(() => {
@@ -47,6 +58,18 @@ export function AppContent() {
     };
   }, [refreshWords, refreshStats]);
 
+  // Global shortcut (Ctrl/Cmd + K) for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#070a11] text-slate-100 flex flex-col lg:flex-row antialiased">
       {/* Desktop Sidebar */}
@@ -65,6 +88,7 @@ export function AppContent() {
           onSelectTab={setCurrentTab}
           stats={stats}
           totalWords={words.length}
+          onOpenSearch={() => setIsSearchOpen(true)}
         />
 
         {/* Workspace */}
@@ -77,10 +101,11 @@ export function AppContent() {
             />
           )}
 
-          {currentTab === 'import' && (
-            <ImportVocabulary
-              onNavigate={setCurrentTab}
+          {currentTab === 'my-words' && (
+            <MyWords
+              words={words}
               onRefreshWords={refreshWords}
+              onNavigate={setCurrentTab}
             />
           )}
 
@@ -92,16 +117,25 @@ export function AppContent() {
             />
           )}
 
-          {currentTab === 'practice' && (
-            <Practice
-              words={words}
-              onRefreshWords={refreshWords}
+          {currentTab === 'irregular-verbs' && (
+            <IrregularVerbs
               onNavigate={setCurrentTab}
+              selectedVerbFromSearch={selectedVerbFromSearch}
             />
           )}
 
-          {currentTab === 'my-words' && (
-            <MyWords
+          {currentTab === 'speaking' && (
+            <Speaking />
+          )}
+
+          {currentTab === 'grammar' && (
+            <Grammar
+              selectedTopicFromSearch={selectedTopicFromSearch}
+            />
+          )}
+
+          {currentTab === 'practice' && (
+            <Practice
               words={words}
               onRefreshWords={refreshWords}
               onNavigate={setCurrentTab}
@@ -116,11 +150,34 @@ export function AppContent() {
               onNavigate={setCurrentTab}
             />
           )}
+
+          {currentTab === 'import' && (
+            <ImportVocabulary
+              onNavigate={setCurrentTab}
+              onRefreshWords={refreshWords}
+            />
+          )}
         </main>
       </div>
 
       {/* Mobile Bottom Navigation */}
       <MobileNav currentTab={currentTab} onSelectTab={setCurrentTab} />
+
+      {/* Global Search Modal */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onNavigate={setCurrentTab}
+        words={words}
+        onOpenVerbDetail={(v) => {
+          setSelectedVerbFromSearch(v);
+          setCurrentTab('irregular-verbs');
+        }}
+        onOpenGrammarTopic={(g) => {
+          setSelectedTopicFromSearch(g);
+          setCurrentTab('grammar');
+        }}
+      />
     </div>
   );
 }

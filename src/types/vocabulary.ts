@@ -39,7 +39,14 @@ export type PracticeMode =
   | 'uzbek_to_english'
   | 'type_answer'
   | 'true_false'
-  | 'listening';
+  | 'listening'
+  | 'past_simple_verbs'
+  | 'past_simple_sentences'
+  | 'past_simple_typing'
+  | 'past_simple_negative_questions'
+  | 'complete_three_forms'
+  | 'past_simple_audio'
+  | 'past_simple_super_mix';
 
 export interface PracticeSessionRecord {
   id: string;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Flame, Target, BookOpen, Layers } from 'lucide-react';
+import { Sparkles, Flame, Target, Search } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { UserStats } from '../types/vocabulary';
 
@@ -8,6 +8,7 @@ interface NavbarProps {
   onSelectTab: (tab: NavTab) => void;
   stats: UserStats;
   totalWords: number;
+  onOpenSearch?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   stats,
   totalWords,
+  onOpenSearch,
 }) => {
   const goalPercent = Math.min(100, Math.round((stats.todayReviewedCount / stats.dailyGoal) * 100));
 
@@ -34,19 +36,37 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden lg:flex items-center gap-2 text-sm">
           <span className="text-slate-400 font-medium">VocabAI</span>
           <span className="text-slate-600">/</span>
-          <span className="text-amber-300 font-semibold capitalize">
-            {currentTab === 'home' && 'Bosh sahifa (Dashboard)'}
-            {currentTab === 'import' && 'Rasm orqali import (AI Scanner)'}
-            {currentTab === 'flashcards' && 'Lug\'at kartochkalari'}
-            {currentTab === 'practice' && 'Mashqlar va testlar'}
-            {currentTab === 'my-words' && 'Lug\'at kutubxonasi'}
-            {currentTab === 'progress' && 'Natijalar va statistika'}
+          <span className="text-amber-300 font-semibold">
+            {currentTab === 'home' && 'Dashboard (Bosh sahifa)'}
+            {currentTab === 'my-words' && 'Vocabulary (Lug\'at kutubxonasi)'}
+            {currentTab === 'flashcards' && 'Flashcards (3D Kartochkalar)'}
+            {currentTab === 'irregular-verbs' && 'Irregular Verbs (Noto\'g\'ri fe\'llar)'}
+            {currentTab === 'speaking' && 'Speaking (Ovozli talaffuz)'}
+            {currentTab === 'grammar' && 'Grammar (Grammatika darslari)'}
+            {currentTab === 'practice' && 'Practice (Mashqlar & Testlar)'}
+            {currentTab === 'progress' && 'Progress (Natijalar & Statistika)'}
+            {currentTab === 'import' && 'Import Vocabulary (AI Photo Scanner)'}
           </span>
         </div>
       </div>
 
-      {/* Right: Quick Stats & Primary Action */}
-      <div className="flex items-center gap-2.5 sm:gap-4">
+      {/* Right: Quick Search, Quick Stats & Primary Action */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Global Search Trigger */}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 hover:border-amber-400/40 text-slate-400 hover:text-white transition-all text-xs"
+            title="Qidiruv (Ctrl/Cmd + K)"
+          >
+            <Search className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Qidirish...</span>
+            <kbd className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5 font-mono">
+              ⌘K
+            </kbd>
+          </button>
+        )}
+
         {/* Streak Pill */}
         <div
           onClick={() => onSelectTab('progress')}
@@ -78,22 +98,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Primary CTA */}
-        {currentTab !== 'import' ? (
+        {currentTab !== 'import' && (
           <button
             onClick={() => onSelectTab('import')}
             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-semibold text-xs sm:text-sm hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-400/20"
           >
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950" />
-            <span className="hidden sm:inline">Import Vocabulary</span>
-            <span className="sm:hidden">Import</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => onSelectTab('flashcards')}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-slate-800 border border-white/10 text-white font-medium text-xs sm:text-sm hover:bg-slate-700 transition-colors"
-          >
-            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-            <span>Kartochkalar</span>
+            <span className="hidden sm:inline">Import</span>
           </button>
         )}
       </div>

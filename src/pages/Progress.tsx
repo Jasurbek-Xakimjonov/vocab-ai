@@ -77,6 +77,18 @@ export const Progress: React.FC<ProgressProps> = ({
   const weeklyData = getLast7Days();
   const maxWeeklyCount = Math.max(...weeklyData.map((d) => d.count), stats.dailyGoal);
 
+  // Irregular verbs stats
+  const irregularVerbs = Storage.getIrregularVerbs();
+  const ivLearned = irregularVerbs.filter((v) => v.status === 'learned').length;
+  const ivPercent = irregularVerbs.length > 0 ? Math.round((ivLearned / irregularVerbs.length) * 100) : 0;
+
+  // Grammar stats
+  const grammarProgress = Storage.getGrammarProgress();
+  const grammarDone = Object.values(grammarProgress).filter((g) => g.completed).length;
+
+  // Speaking stats
+  const speakingHistory = Storage.getSpeakingHistory();
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* Header */}
@@ -89,12 +101,12 @@ export const Progress: React.FC<ProgressProps> = ({
           Progress & Learning Analytics
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm">
-          So'zlarni o'zlashtirish sur'ati, kunlik intizom (streak) va mashg'ulotlar tahlili.
+          So'zlarni o'zlashtirish sur'ati, kunlik intizom (streak) va barcha bo'limlar bo'yicha rivojlanish tahlili.
         </p>
       </div>
 
-      {/* Primary 4 Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Primary Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Streak */}
         <div className="p-5 rounded-2xl bg-[#0d1322] border border-white/5 shadow-xl relative overflow-hidden">
           <div className="flex items-center justify-between mb-3">
@@ -120,28 +132,42 @@ export const Progress: React.FC<ProgressProps> = ({
             </div>
           </div>
           <div className="text-3xl font-black text-white">{totalWords}</div>
-          <p className="text-[11px] text-slate-400 mt-1">{learnedCount} tasi o'zlashtirilgan</p>
+          <p className="text-[11px] text-slate-400 mt-1">{learnedCount} tasi o'zlashtirilgan ({learnedPercent}%)</p>
         </div>
 
-        {/* Accuracy */}
+        {/* Irregular Verbs */}
         <div className="p-5 rounded-2xl bg-[#0d1322] border border-white/5 shadow-xl">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-              O'rtacha aniqlik
+              Irregular Verbs
+            </span>
+            <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center">
+              <Zap className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-amber-300">{ivLearned} / {irregularVerbs.length}</div>
+          <p className="text-[11px] text-slate-400 mt-1">{ivPercent}% o'zlashtirilgan</p>
+        </div>
+
+        {/* Grammar & Speaking */}
+        <div className="p-5 rounded-2xl bg-[#0d1322] border border-white/5 shadow-xl">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+              Grammar
             </span>
             <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
               <Trophy className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-3xl font-black text-emerald-400">{avgAccuracy}%</div>
-          <p className="text-[11px] text-slate-400 mt-1">Test va mashqlar aniqligi</p>
+          <div className="text-3xl font-black text-emerald-400">{grammarDone} mavzu</div>
+          <p className="text-[11px] text-slate-400 mt-1">{speakingHistory.length} ta speaking mashqi</p>
         </div>
 
         {/* Practice Sessions */}
         <div className="p-5 rounded-2xl bg-[#0d1322] border border-white/5 shadow-xl">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-              Mashq sessiyalari
+              Mashqlar
             </span>
             <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center">
               <BarChart3 className="w-5 h-5" />

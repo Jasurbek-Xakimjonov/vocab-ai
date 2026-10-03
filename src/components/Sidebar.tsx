@@ -7,12 +7,22 @@ import {
   BookOpen,
   LineChart,
   Flame,
-  PlusCircle,
-  RotateCcw,
+  Zap,
+  Mic,
+  GraduationCap,
 } from 'lucide-react';
 import { UserStats } from '../types/vocabulary';
 
-export type NavTab = 'home' | 'import' | 'flashcards' | 'practice' | 'my-words' | 'progress';
+export type NavTab =
+  | 'home'
+  | 'my-words'
+  | 'flashcards'
+  | 'irregular-verbs'
+  | 'speaking'
+  | 'grammar'
+  | 'practice'
+  | 'progress'
+  | 'import';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -21,25 +31,32 @@ interface SidebarProps {
   totalWordsCount: number;
 }
 
+interface NavItem {
+  id: NavTab;
+  label: string;
+  sublabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  highlight?: boolean;
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   stats,
   totalWordsCount,
 }) => {
-  const navItems = [
+  const navItems: NavItem[] = [
     {
       id: 'home' as NavTab,
-      label: 'Bosh sahifa',
-      sublabel: 'Dashboard',
+      label: 'Dashboard',
+      sublabel: 'Bosh sahifa',
       icon: LayoutDashboard,
     },
     {
-      id: 'import' as NavTab,
-      label: 'Import Vocabulary',
-      sublabel: 'AI Photo Scanner',
-      icon: Sparkles,
-      highlight: true,
+      id: 'my-words' as NavTab,
+      label: 'Vocabulary',
+      sublabel: `${totalWordsCount} ta so'z`,
+      icon: BookOpen,
     },
     {
       id: 'flashcards' as NavTab,
@@ -48,16 +65,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Layers,
     },
     {
-      id: 'practice' as NavTab,
-      label: 'Practice',
-      sublabel: 'Mashq va testlar',
-      icon: Dumbbell,
+      id: 'irregular-verbs' as NavTab,
+      label: 'Irregular Verbs',
+      sublabel: '3 xil shakli (V1-V2-V3)',
+      icon: Zap,
     },
     {
-      id: 'my-words' as NavTab,
-      label: 'My Words',
-      sublabel: `${totalWordsCount} ta so'z`,
-      icon: BookOpen,
+      id: 'speaking' as NavTab,
+      label: 'Speaking',
+      sublabel: 'Ovozli talaffuz',
+      icon: Mic,
+    },
+    {
+      id: 'grammar' as NavTab,
+      label: 'Grammar',
+      sublabel: 'Qoidalar va testlar',
+      icon: GraduationCap,
+    },
+    {
+      id: 'practice' as NavTab,
+      label: 'Practice',
+      sublabel: 'Mashq va viktorina',
+      icon: Dumbbell,
     },
     {
       id: 'progress' as NavTab,
