@@ -310,20 +310,40 @@ export const Progress: React.FC<ProgressProps> = ({
               O'zingizga qulay kunlik so'z miqdorini tanlang. Barqarorlik til o'rganishda eng muhim omildir.
             </p>
 
-            <div className="grid grid-cols-3 gap-2">
-              {[10, 20, 30].map((goal) => (
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {[10, 20, 30, 50, 75, 100].map((goal) => (
                 <button
                   key={goal}
                   onClick={() => handleGoalChange(goal)}
-                  className={`py-3 rounded-xl font-bold text-sm transition-all ${
+                  className={`py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${
                     stats.dailyGoal === goal
                       ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
                       : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-white/5'
                   }`}
                 >
-                  {goal} so'z
+                  {goal} {goal === 100 ? '🔥' : 'so\'z'}
                 </button>
               ))}
+            </div>
+
+            {/* Custom slider from 10 to 100 */}
+            <div className="space-y-1.5 pt-2">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Sekin (10 ta)</span>
+                <span className="text-amber-300 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+                  {stats.dailyGoal} ta so'z / kun
+                </span>
+                <span>Maksimum (100 ta 🔥)</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                step="5"
+                value={stats.dailyGoal}
+                onChange={(e) => handleGoalChange(Number(e.target.value))}
+                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
             </div>
 
             <div className="pt-2 border-t border-white/5 text-xs text-slate-400 flex items-center justify-between">

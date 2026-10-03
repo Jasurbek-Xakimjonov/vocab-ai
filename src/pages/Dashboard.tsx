@@ -163,16 +163,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               {/* Goal Selector */}
-              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Maqsadni o'zgartirish:</span>
-                <div className="flex gap-1">
-                  {[10, 20, 30].map((goal) => (
+              <div className="pt-2 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Maqsadni o'zgartirish:</span>
+                  <span className="text-amber-400 font-bold">{stats.dailyGoal} ta / kun</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {[10, 20, 30, 50, 75, 100].map((goal) => (
                     <button
                       key={goal}
                       onClick={() => handleGoalChange(goal)}
-                      className={`px-2 py-0.5 rounded-md font-semibold transition-colors ${
+                      className={`px-2 py-0.5 rounded-md font-semibold text-xs transition-colors ${
                         stats.dailyGoal === goal
-                          ? 'bg-amber-400 text-slate-950'
+                          ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
                           : 'bg-slate-800 text-slate-400 hover:text-white'
                       }`}
                     >
