@@ -4,6 +4,7 @@ import { INITIAL_IRREGULAR_VERBS } from '../data/irregularVerbsData';
 import { GrammarProgressRecord } from '../types/grammar';
 import { SpeakingResult } from '../types/speaking';
 import { VideoProgressState } from '../types/speakingVideos';
+import { DatabaseService } from '../services/databaseService';
 
 const WORDS_STORAGE_KEY = 'vocabai_words_v1';
 const STATS_STORAGE_KEY = 'vocabai_stats_v1';
@@ -419,6 +420,8 @@ export const INITIAL_VOCABULARY: VocabularyWord[] = [
   },
 ];
 
+let currentUserId: string | null = null;
+
 function getTodayKey(): string {
   const d = new Date();
   const year = d.getFullYear();
@@ -428,16 +431,85 @@ function getTodayKey(): string {
 }
 
 export const Storage = {
+  setCurrentUserId(userId: string | null): void {
+    currentUserId = userId;
+    if (userId) {
+      this.syncUserVocabulary(userId);
+    }
+    window.dispatchEvent(new Event('vocabai_words_updated'));
+    window.dispatchEvent(new Event('vocabai_stats_updated'));
+  },
+
+  getCurrentUserId(): string | null {
+    return currentUserId;
+  },
+
+  getWordsKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_words_v1` : WORDS_STORAGE_KEY;
+  },
+
+  getStatsKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_stats_v1` : STATS_STORAGE_KEY;
+  },
+
+  getPracticeKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_practice_v1` : PRACTICE_STORAGE_KEY;
+  },
+
+  getIrregularKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_irregular_verbs_v1` : IRREGULAR_VERBS_KEY;
+  },
+
+  getGrammarKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_grammar_progress_v1` : GRAMMAR_PROGRESS_KEY;
+  },
+
+  getSpeakingKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_speaking_history_v1` : SPEAKING_HISTORY_KEY;
+  },
+
+  getVideoKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_video_progress_v1` : VIDEO_PROGRESS_KEY;
+  },
+
+  async syncUserVocabulary(userId: string): Promise<void> {
+    try {
+      const remoteWords = await DatabaseService.fetchUserVocabulary(userId);
+      const key = this.getWordsKey();
+      if (remoteWords && remoteWords.length > 0) {
+        localStorage.setItem(key, JSON.stringify(remoteWords));
+        window.dispatchEvent(new Event('vocabai_words_updated'));
+      } else if (remoteWords && remoteWords.length === 0) {
+        // First-time registered user: seed isolated initial vocabulary for this user
+        const userInitial = INITIAL_VOCABULARY.map((w, idx) => ({
+          ...w,
+          id: `w_${userId.substring(0, 6)}_${idx + 1}_${Math.random().toString(36).substring(2, 6)}`,
+          createdAt: new Date().toISOString(),
+        }));
+        localStorage.setItem(key, JSON.stringify(userInitial));
+        await DatabaseService.seedWords(userId, userInitial);
+        window.dispatchEvent(new Event('vocabai_words_updated'));
+      }
+    } catch (e) {
+      console.warn('Sync user vocabulary error:', e);
+    }
+  },
+
   getWords(): VocabularyWord[] {
     try {
-      const raw = localStorage.getItem(WORDS_STORAGE_KEY);
+      const key = this.getWordsKey();
+      const raw = localStorage.getItem(key);
       if (!raw) {
-        localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(INITIAL_VOCABULARY));
+        // Seed initial vocabulary for active session
+        localStorage.setItem(key, JSON.stringify(INITIAL_VOCABULARY));
+        if (currentUserId) {
+          DatabaseService.seedWords(currentUserId, INITIAL_VOCABULARY);
+        }
         return INITIAL_VOCABULARY;
       }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(INITIAL_VOCABULARY));
+        localStorage.setItem(key, JSON.stringify(INITIAL_VOCABULARY));
         return INITIAL_VOCABULARY;
       }
       return parsed;
@@ -449,7 +521,7 @@ export const Storage = {
 
   saveWords(words: VocabularyWord[]): void {
     try {
-      localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(words));
+      localStorage.setItem(this.getWordsKey(), JSON.stringify(words));
       window.dispatchEvent(new Event('vocabai_words_updated'));
     } catch (e) {
       console.error('Failed writing words to localStorage:', e);
@@ -492,6 +564,10 @@ export const Storage = {
       existing.unshift(newWordObj);
       existingSet.add(cleanWord.toLowerCase());
       created.push(newWordObj);
+
+      if (currentUserId) {
+        DatabaseService.saveWord(currentUserId, newWordObj);
+      }
     }
 
     this.saveWords(existing);
@@ -519,7 +595,16 @@ export const Storage = {
 
     existing.unshift(newWord);
     this.saveWords(existing);
+
+    if (currentUserId) {
+      DatabaseService.saveWord(currentUserId, newWord);
+    }
+
     return newWord;
+  },
+
+  addCustomWord(wordData: Partial<VocabularyWord>): VocabularyWord {
+    return this.addSingleWord(wordData);
   },
 
   updateWord(id: string, updates: Partial<VocabularyWord>): void {
@@ -528,12 +613,20 @@ export const Storage = {
     if (index !== -1) {
       words[index] = { ...words[index], ...updates };
       this.saveWords(words);
+
+      if (currentUserId) {
+        DatabaseService.saveWord(currentUserId, words[index]);
+      }
     }
   },
 
   deleteWord(id: string): void {
     const words = this.getWords().filter((w) => w.id !== id);
     this.saveWords(words);
+
+    if (currentUserId) {
+      DatabaseService.deleteWord(currentUserId, id);
+    }
   },
 
   toggleFavorite(id: string): boolean {
@@ -542,6 +635,11 @@ export const Storage = {
     if (item) {
       item.isFavorite = !item.isFavorite;
       this.saveWords(words);
+
+      if (currentUserId) {
+        DatabaseService.saveWord(currentUserId, item);
+      }
+
       return item.isFavorite;
     }
     return false;
@@ -549,10 +647,16 @@ export const Storage = {
 
   /**
    * Spaced repetition rating algorithm
-   * Again: review today / tomorrow (interval 1 day, mark difficult if repeated)
-   * Hard: short interval (interval 2 days)
-   * Good: moderate interval (interval 4-6 days)
-   * Easy: long interval (interval 7-14 days, mark learned)
+   * Good:
+   *   Interval expands: 1 day -> 3 days -> 7 days -> 14 days
+   *   status = 'learned'
+   * Hard:
+   *   Interval contracts: 1 day (or short 10m/30m/1d)
+   *   wrong_count increments, status = 'difficult'
+   * Again:
+   *   1 day interval, status = 'difficult'
+   * Easy:
+   *   Interval jumps: 7+ days, status = 'learned'
    */
   rateWord(id: string, rating: RatingLevel): VocabularyWord | null {
     const words = this.getWords();
@@ -560,39 +664,65 @@ export const Storage = {
     if (!item) return null;
 
     const now = new Date();
-    let nextIntervalDays = item.intervalDays || 1;
+    let currentInterval = item.intervalDays || 1;
+    let nextIntervalDays = 1;
     let newStatus = item.status;
 
     item.reviewCount = (item.reviewCount || 0) + 1;
     item.lastRating = rating;
     item.lastReviewedAt = now.toISOString();
 
+    const nextDate = new Date();
+
     if (rating === 'again') {
-      nextIntervalDays = 1;
+      // Again: 10 minutes
+      nextDate.setMinutes(nextDate.getMinutes() + 10);
+      nextIntervalDays = 0.01;
       item.incorrectCount = (item.incorrectCount || 0) + 1;
       newStatus = 'difficult';
     } else if (rating === 'hard') {
-      nextIntervalDays = Math.max(1, Math.round(nextIntervalDays * 1.2));
-      item.correctCount = (item.correctCount || 0) + 1;
-      if (item.status === 'learning') newStatus = 'learning';
+      // Hard: 30 minutes
+      nextDate.setMinutes(nextDate.getMinutes() + 30);
+      nextIntervalDays = 0.02;
+      item.incorrectCount = (item.incorrectCount || 0) + 1;
+      newStatus = 'difficult';
     } else if (rating === 'good') {
-      nextIntervalDays = Math.max(3, Math.round((nextIntervalDays || 2) * 1.8));
+      // Good: expand interval: 1 day -> 3 days -> 7 days -> 14 days
+      if (currentInterval < 1) nextIntervalDays = 1;
+      else if (currentInterval < 3) nextIntervalDays = 3;
+      else if (currentInterval < 7) nextIntervalDays = 7;
+      else nextIntervalDays = 14;
+
+      nextDate.setDate(nextDate.getDate() + nextIntervalDays);
       item.correctCount = (item.correctCount || 0) + 1;
       newStatus = 'learned';
     } else if (rating === 'easy') {
-      nextIntervalDays = Math.max(6, Math.round((nextIntervalDays || 3) * 2.5));
+      nextIntervalDays = Math.max(7, Math.round(currentInterval * 2));
+      nextDate.setDate(nextDate.getDate() + nextIntervalDays);
       item.correctCount = (item.correctCount || 0) + 1;
       newStatus = 'learned';
     }
 
     item.intervalDays = nextIntervalDays;
     item.status = newStatus;
-
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + nextIntervalDays);
     item.nextReviewAt = nextDate.toISOString();
 
     this.saveWords(words);
+
+    // Sync to Supabase
+    if (currentUserId) {
+      DatabaseService.saveWord(currentUserId, item);
+      DatabaseService.saveWordProgress(
+        currentUserId,
+        item.id,
+        rating,
+        item.correctCount,
+        item.incorrectCount,
+        newStatus,
+        nextIntervalDays,
+        item.nextReviewAt
+      );
+    }
 
     // Update user daily stats
     this.incrementReviewedCount();
@@ -602,11 +732,11 @@ export const Storage = {
 
   getUserStats(): UserStats {
     try {
-      const raw = localStorage.getItem(STATS_STORAGE_KEY);
+      const raw = localStorage.getItem(this.getStatsKey());
       const today = getTodayKey();
 
       const defaultStats: UserStats = {
-        streakDays: 5, // Welcoming initial streak
+        streakDays: 5,
         lastActiveDate: today,
         dailyGoal: 20,
         todayReviewedCount: 0,
@@ -617,7 +747,7 @@ export const Storage = {
       };
 
       if (!raw) {
-        localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(defaultStats));
+        localStorage.setItem(this.getStatsKey(), JSON.stringify(defaultStats));
         return defaultStats;
       }
 
@@ -642,7 +772,7 @@ export const Storage = {
         if (!stats.weeklyActivity) stats.weeklyActivity = {};
         stats.weeklyActivity[today] = 0;
 
-        localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats));
+        localStorage.setItem(this.getStatsKey(), JSON.stringify(stats));
       }
 
       return stats;
@@ -661,7 +791,7 @@ export const Storage = {
 
   saveUserStats(stats: UserStats): void {
     try {
-      localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats));
+      localStorage.setItem(this.getStatsKey(), JSON.stringify(stats));
       window.dispatchEvent(new Event('vocabai_stats_updated'));
     } catch (e) {
       console.error('Failed saving stats:', e);
@@ -692,7 +822,7 @@ export const Storage = {
 
   getPracticeHistory(): PracticeSessionRecord[] {
     try {
-      const raw = localStorage.getItem(PRACTICE_STORAGE_KEY);
+      const raw = localStorage.getItem(this.getPracticeKey());
       if (!raw) return [];
       return JSON.parse(raw);
     } catch (e) {
@@ -711,7 +841,7 @@ export const Storage = {
     if (history.length > 50) history.pop();
 
     try {
-      localStorage.setItem(PRACTICE_STORAGE_KEY, JSON.stringify(history));
+      localStorage.setItem(this.getPracticeKey(), JSON.stringify(history));
     } catch (e) {}
 
     // Bump user stats
@@ -719,25 +849,41 @@ export const Storage = {
     stats.totalPracticeSessions = (stats.totalPracticeSessions || 0) + 1;
     this.saveUserStats(stats);
 
+    // Sync to Supabase
+    if (currentUserId) {
+      DatabaseService.saveQuizResult(
+        currentUserId,
+        record.mode,
+        record.correctAnswers,
+        record.totalQuestions
+      );
+    }
+
     return newRecord;
   },
 
+  saveSpellingResult(wordId: string, isCorrect: boolean, attempt: string): void {
+    if (currentUserId) {
+      DatabaseService.saveSpellingResult(currentUserId, wordId, isCorrect, attempt);
+    }
+  },
+
   resetToDefault(): void {
-    localStorage.setItem(WORDS_STORAGE_KEY, JSON.stringify(INITIAL_VOCABULARY));
+    localStorage.setItem(this.getWordsKey(), JSON.stringify(INITIAL_VOCABULARY));
     window.dispatchEvent(new Event('vocabai_words_updated'));
   },
 
   // ================= Irregular Verbs =================
   getIrregularVerbs(): IrregularVerb[] {
     try {
-      const raw = localStorage.getItem(IRREGULAR_VERBS_KEY);
+      const raw = localStorage.getItem(this.getIrregularKey());
       if (!raw) {
-        localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+        localStorage.setItem(this.getIrregularKey(), JSON.stringify(INITIAL_IRREGULAR_VERBS));
         return INITIAL_IRREGULAR_VERBS;
       }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+        localStorage.setItem(this.getIrregularKey(), JSON.stringify(INITIAL_IRREGULAR_VERBS));
         return INITIAL_IRREGULAR_VERBS;
       }
       return parsed;
@@ -748,7 +894,7 @@ export const Storage = {
 
   saveIrregularVerbs(verbs: IrregularVerb[]): void {
     try {
-      localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(verbs));
+      localStorage.setItem(this.getIrregularKey(), JSON.stringify(verbs));
       window.dispatchEvent(new Event('vocabai_irregular_verbs_updated'));
     } catch (e) {
       console.error('Failed saving irregular verbs:', e);
@@ -760,26 +906,35 @@ export const Storage = {
     const item = verbs.find((v) => v.id === id);
     if (!item) return null;
 
+    const nowIso = new Date().toISOString();
     item.reviewCount = (item.reviewCount || 0) + 1;
     item.lastRating = rating;
-    item.lastReviewedAt = new Date().toISOString();
+    item.lastReviewedAt = nowIso;
+    item.last_reviewed_at = nowIso;
 
-    if (rating === 'again') {
-      item.status = 'difficult';
-      item.intervalDays = 1;
-    } else if (rating === 'hard') {
-      item.status = 'learning';
-      item.intervalDays = 2;
-    } else if (rating === 'good') {
+    if (rating === 'again' || rating === 'hard') {
+      item.wrong_count = (item.wrong_count || 0) + 1;
+      item.status = rating === 'again' ? 'difficult' : 'learning';
+      item.intervalDays = rating === 'again' ? 1 : 2;
+    } else {
+      item.correct_count = (item.correct_count || 0) + 1;
       item.status = 'learned';
-      item.intervalDays = 4;
-    } else if (rating === 'easy') {
-      item.status = 'learned';
-      item.intervalDays = 7;
+      item.intervalDays = rating === 'easy' ? 7 : 4;
     }
 
     this.saveIrregularVerbs(verbs);
     this.incrementReviewedCount();
+
+    if (currentUserId) {
+      DatabaseService.saveIrregularVerbProgress(
+        currentUserId,
+        item.id,
+        item.correct_count || 0,
+        item.wrong_count || 0,
+        nowIso
+      );
+    }
+
     return item;
   },
 
@@ -801,14 +956,14 @@ export const Storage = {
   },
 
   resetIrregularVerbsToDefault(): void {
-    localStorage.setItem(IRREGULAR_VERBS_KEY, JSON.stringify(INITIAL_IRREGULAR_VERBS));
+    localStorage.setItem(this.getIrregularKey(), JSON.stringify(INITIAL_IRREGULAR_VERBS));
     window.dispatchEvent(new Event('vocabai_irregular_verbs_updated'));
   },
 
   // ================= Grammar Progress =================
   getGrammarProgress(): Record<string, GrammarProgressRecord> {
     try {
-      const raw = localStorage.getItem(GRAMMAR_PROGRESS_KEY);
+      const raw = localStorage.getItem(this.getGrammarKey());
       if (!raw) return {};
       return JSON.parse(raw);
     } catch (e) {
@@ -818,7 +973,7 @@ export const Storage = {
 
   saveGrammarProgress(progress: Record<string, GrammarProgressRecord>): void {
     try {
-      localStorage.setItem(GRAMMAR_PROGRESS_KEY, JSON.stringify(progress));
+      localStorage.setItem(this.getGrammarKey(), JSON.stringify(progress));
       window.dispatchEvent(new Event('vocabai_grammar_updated'));
     } catch (e) {
       console.error('Failed saving grammar progress:', e);
@@ -841,7 +996,7 @@ export const Storage = {
   // ================= Speaking History =================
   getSpeakingHistory(): SpeakingResult[] {
     try {
-      const raw = localStorage.getItem(SPEAKING_HISTORY_KEY);
+      const raw = localStorage.getItem(this.getSpeakingKey());
       if (!raw) return [];
       return JSON.parse(raw);
     } catch (e) {
@@ -854,18 +1009,23 @@ export const Storage = {
     history.unshift(result);
     if (history.length > 50) history.pop();
     try {
-      localStorage.setItem(SPEAKING_HISTORY_KEY, JSON.stringify(history));
+      localStorage.setItem(this.getSpeakingKey(), JSON.stringify(history));
       window.dispatchEvent(new Event('vocabai_speaking_updated'));
     } catch (e) {
       console.error('Failed saving speaking history:', e);
     }
+
+    if (currentUserId) {
+      DatabaseService.saveSpeakingResult(currentUserId, result);
+    }
+
     this.incrementReviewedCount();
   },
 
   // ================= Speaking Videos Progress =================
   getVideoProgress(): VideoProgressState {
     try {
-      const raw = localStorage.getItem(VIDEO_PROGRESS_KEY);
+      const raw = localStorage.getItem(this.getVideoKey());
       if (!raw) {
         return {
           watchedVideoIds: [],
@@ -885,7 +1045,7 @@ export const Storage = {
 
   saveVideoProgress(state: VideoProgressState): void {
     try {
-      localStorage.setItem(VIDEO_PROGRESS_KEY, JSON.stringify(state));
+      localStorage.setItem(this.getVideoKey(), JSON.stringify(state));
       window.dispatchEvent(new Event('vocabai_video_progress_updated'));
     } catch (e) {
       console.error('Failed saving video progress:', e);

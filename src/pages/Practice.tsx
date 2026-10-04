@@ -629,6 +629,10 @@ export const Practice: React.FC<PracticeProps> = ({
 
     setIsCorrect(correct);
 
+    if (currentQ.targetWord?.id) {
+      Storage.saveSpellingResult(currentQ.targetWord.id, correct, cleanTyped);
+    }
+
     if (correct) {
       setScore((s) => s + 1);
       setStreakInSession((s) => s + 1);

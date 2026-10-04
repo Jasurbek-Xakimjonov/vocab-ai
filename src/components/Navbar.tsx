@@ -1,7 +1,8 @@
 import React from 'react';
-import { Sparkles, Flame, Target, Search } from 'lucide-react';
+import { Sparkles, Flame, Target, Search, LogOut } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { UserStats } from '../types/vocabulary';
+import { useAuth } from '../context/AuthContext';
 
 interface NavbarProps {
   currentTab: NavTab;
@@ -18,6 +19,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalWords,
   onOpenSearch,
 }) => {
+  const { user, profile, logout } = useAuth();
   const goalPercent = Math.min(100, Math.round((stats.todayReviewedCount / stats.dailyGoal) * 100));
 
   return (
@@ -107,6 +109,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950" />
             <span className="hidden sm:inline">Import</span>
           </button>
+        )}
+
+        {/* User Profile & Logout (Top Bar) */}
+        {user && (
+          <div className="flex items-center gap-2 pl-1 border-l border-white/10">
+            <div
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-xs flex items-center justify-center shadow-md shadow-amber-400/20"
+              title={profile?.name || user.email || ''}
+            >
+              {profile?.name ? profile.name.substring(0, 2).toUpperCase() : 'U'}
+            </div>
+
+            <button
+              onClick={() => logout()}
+              className="p-1.5 rounded-xl bg-slate-900 border border-white/10 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-colors"
+              title="Chiqish (Logout)"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </header>

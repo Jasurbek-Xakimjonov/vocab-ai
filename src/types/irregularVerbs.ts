@@ -11,8 +11,11 @@ export interface IrregularVerb {
   status: 'learning' | 'learned' | 'difficult';
   isFavorite: boolean;
   reviewCount: number;
+  correct_count?: number;
+  wrong_count?: number;
   lastRating?: 'again' | 'hard' | 'good' | 'easy';
   lastReviewedAt?: string;
+  last_reviewed_at?: string;
   intervalDays?: number;
 }
 

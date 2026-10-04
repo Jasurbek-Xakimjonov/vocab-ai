@@ -23,8 +23,11 @@ import { VocabularyWord, UserStats } from './types/vocabulary';
 import { IrregularVerb } from './types/irregularVerbs';
 import { GrammarTopic } from './types/grammar';
 import { Storage } from './utils/storage';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthModal } from './components/AuthModal';
 
 export function AppContent() {
+  const { user, profile, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [words, setWords] = useState<VocabularyWord[]>([]);
   const [stats, setStats] = useState<UserStats>(() => Storage.getUserStats());
@@ -57,7 +60,7 @@ export function AppContent() {
       window.removeEventListener('vocabai_words_updated', handleWordsUpdate);
       window.removeEventListener('vocabai_stats_updated', handleStatsUpdate);
     };
-  }, [refreshWords, refreshStats]);
+  }, [user, refreshWords, refreshStats]);
 
   // Global shortcut (Ctrl/Cmd + K) for search
   useEffect(() => {
@@ -70,6 +73,29 @@ export function AppContent() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Loading Screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#070a11] text-slate-100 flex flex-col items-center justify-center p-6 space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-2xl shadow-amber-400/20 text-2xl animate-pulse">
+          V
+        </div>
+        <div className="text-amber-300 text-sm font-semibold tracking-wide">
+          VocabAI yuklanmoqda...
+        </div>
+      </div>
+    );
+  }
+
+  // Auth Protection Gate: Non-logged in users must login/register
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#070a11] text-slate-100 flex flex-col justify-center items-center p-4">
+        <AuthModal isOpen={true} canClose={false} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#070a11] text-slate-100 flex flex-col lg:flex-row antialiased">
@@ -193,7 +219,9 @@ export function AppContent() {
 export default function App() {
   return (
     <ToastProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ToastProvider>
   );
 }

@@ -11,8 +11,10 @@ import {
   Mic,
   GraduationCap,
   Film,
+  LogOut,
 } from 'lucide-react';
 import { UserStats } from '../types/vocabulary';
+import { useAuth } from '../context/AuthContext';
 
 export type NavTab =
   | 'home'
@@ -47,6 +49,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   stats,
   totalWordsCount,
 }) => {
+  const { user, profile, logout } = useAuth();
+
   const navItems: NavItem[] = [
     {
       id: 'home' as NavTab,
@@ -204,6 +208,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Rasm orqali qo'shish</span>
         </button>
       </div>
+
+      {/* User Account / Profile & Logout */}
+      {user && (
+        <div className="p-3.5 border-t border-white/5 bg-slate-950/80 flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-xs flex items-center justify-center shadow-md shadow-amber-400/20 shrink-0">
+              {profile?.name ? profile.name.substring(0, 2).toUpperCase() : 'U'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-white truncate">
+                {profile?.name || user.email?.split('@')[0]}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">
+                {user.email}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => logout()}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors shrink-0"
+            title="Tizimdan chiqish (Logout)"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

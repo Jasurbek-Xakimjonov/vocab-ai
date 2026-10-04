@@ -23,6 +23,7 @@ import { NavTab } from '../components/Sidebar';
 import { Storage } from '../utils/storage';
 import { speakWord } from '../utils/speech';
 import { GRAMMAR_TOPICS } from '../data/grammarData';
+import { useAuth } from '../context/AuthContext';
 
 interface DashboardProps {
   words: VocabularyWord[];
@@ -61,15 +62,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
   }, []);
 
+  const { profile } = useAuth();
+
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Xayrli tong';
-    if (hour < 18) return 'Xayrli kun';
-    return 'Xayrli kech';
+    let timeGreeting = 'Xayrli tong';
+    if (hour >= 12 && hour < 18) timeGreeting = 'Xayrli kun';
+    else if (hour >= 18) timeGreeting = 'Xayrli kech';
+
+    return profile?.name ? `${timeGreeting}, ${profile.name}` : timeGreeting;
   };
 
   // Vocabulary stats
+  const totalWordsCount = words.length;
   const vocabLearnedCount = words.filter((w) => w.status === 'learned').length;
+  const hardWordsCount = words.filter((w) => w.status === 'difficult').length;
+
+  const totalReviews = words.reduce((acc, w) => acc + (w.correctCount || 0) + (w.incorrectCount || 0), 0);
+  const totalCorrect = words.reduce((acc, w) => acc + (w.correctCount || 0), 0);
+  const accuracyPercent = totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : 86;
+
   const vocabPercent = words.length > 0 ? Math.round((vocabLearnedCount / words.length) * 100) : 0;
 
   // Irregular Verbs stats
@@ -122,17 +134,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             {/* Core Achievement Highlights requested in brief */}
             <div className="flex flex-wrap items-center gap-2.5 pt-2">
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-bold">
-                <Flame className="w-4 h-4 fill-orange-400 text-orange-400" />
-                <span>{stats.streakDays} day streak</span>
-              </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-300 text-xs font-bold">
-                <span>⭐</span>
-                <span>{vocabLearnedCount} words learned</span>
-              </div>
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800/80 border border-white/10 text-slate-200 text-xs font-bold">
                 <span>📚</span>
-                <span>{verbsLearnedCount} irregular verbs learned</span>
+                <span>{totalWordsCount} Words</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                <span>✅</span>
+                <span>{vocabLearnedCount} Learned</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold">
+                <span>🔥</span>
+                <span>{hardWordsCount} Hard</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-bold">
+                <span>🎯</span>
+                <span>{accuracyPercent}% Accuracy</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-300 text-xs font-bold">
+                <Flame className="w-4 h-4 fill-orange-400 text-orange-400" />
+                <span>{stats.streakDays} Day Streak</span>
               </div>
             </div>
           </div>

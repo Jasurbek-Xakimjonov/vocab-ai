@@ -49,6 +49,15 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   const prevFilterModeRef = useRef(filterMode);
   const deckInitializedRef = useRef(false);
 
+  // Helper for user-scoped flashcard progress storage key
+  const getIndexStorageKey = useCallback(
+    (mode: string) => {
+      const uid = Storage.getCurrentUserId();
+      return uid ? `vocabai_${uid}_flashcard_idx_${mode}` : `vocabai_flashcard_idx_${mode}`;
+    },
+    []
+  );
+
   // Helper to get filtered word list based on filterMode
   const getFilteredWords = useCallback((sourceWords: VocabularyWord[], mode: typeof filterMode) => {
     let filtered = [...sourceWords];
@@ -72,7 +81,17 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
     if (!deckInitializedRef.current || filterChanged) {
       deckInitializedRef.current = true;
       setDeck(filtered);
-      setCurrentIndex(0);
+      let initialIdx = 0;
+      try {
+        const saved = localStorage.getItem(getIndexStorageKey(filterMode));
+        if (saved) {
+          const parsed = parseInt(saved, 10);
+          if (!isNaN(parsed) && parsed >= 0 && parsed < filtered.length) {
+            initialIdx = parsed;
+          }
+        }
+      } catch (e) {}
+      setCurrentIndex(initialIdx);
       setIsFlipped(false);
       setIsDeckCompleted(false);
     } else {
@@ -84,7 +103,7 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
         return prevDeck.map((item) => wordMap.get(item.id) || item);
       });
     }
-  }, [words, filterMode, getFilteredWords]);
+  }, [words, filterMode, getFilteredWords, getIndexStorageKey]);
 
   const currentCard = deck[currentIndex];
 
@@ -103,26 +122,37 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
   const handleNext = useCallback(() => {
     setCurrentIndex((prev) => {
       if (prev < deck.length - 1) {
+        const next = prev + 1;
         setIsFlipped(false);
-        return prev + 1;
+        try {
+          localStorage.setItem(getIndexStorageKey(filterMode), String(next));
+        } catch (e) {}
+        return next;
       } else {
         setIsDeckCompleted(true);
         setIsFlipped(false);
+        try {
+          localStorage.removeItem(getIndexStorageKey(filterMode));
+        } catch (e) {}
         return prev;
       }
     });
-  }, [deck.length]);
+  }, [deck.length, filterMode, getIndexStorageKey]);
 
   // Prev card
   const handlePrev = useCallback(() => {
     setCurrentIndex((prev) => {
       if (prev > 0) {
+        const next = prev - 1;
         setIsFlipped(false);
-        return prev - 1;
+        try {
+          localStorage.setItem(getIndexStorageKey(filterMode), String(next));
+        } catch (e) {}
+        return next;
       }
       return prev;
     });
-  }, []);
+  }, [filterMode, getIndexStorageKey]);
 
   // Shuffle deck
   const handleShuffle = () => {
@@ -136,27 +166,46 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
     setCurrentIndex(0);
     setIsFlipped(false);
     setIsDeckCompleted(false);
+    try {
+      localStorage.setItem(getIndexStorageKey(filterMode), '0');
+    } catch (e) {}
     toast.info('Kartochkalar aralashtirildi!');
   };
 
-  // Rate card (Again / Hard / Good / Easy) - None of them auto-advance
+  // Rate card: Word 1 -> Good/Hard -> Word 2 -> Word 3 -> Word 4
   const handleRate = (rating: RatingLevel) => {
     if (!currentCard) return;
 
+    // 1. Rate word and persist in storage & Supabase
     Storage.rateWord(currentCard.id, rating);
 
     if (rating === 'again') {
-      toast.info(`"${currentCard.word}" takrorlash uchun qayta kiritildi.`);
+      toast.info(`"${currentCard.word}" takrorlash uchun kiritildi.`);
     } else if (rating === 'hard') {
-      toast.info(`"${currentCard.word}" o'rganilmoqda deb saqlandi.`);
+      toast.info(`"${currentCard.word}" o'rganilmoqda (Hard) deb saqlandi.`);
     } else if (rating === 'good') {
-      toast.success(`"${currentCard.word}" yodlanganlarga qo'shildi! ✅`);
+      toast.success(`"${currentCard.word}" yodlanganlarga (Good) qo'shildi! ✅`);
     } else if (rating === 'easy') {
-      toast.success(`"${currentCard.word}" oson (yodlangan) deb saqlandi! ✅`);
+      toast.success(`"${currentCard.word}" oson (Easy) deb saqlandi! ✅`);
     }
 
-    // Do NOT advance to next card - stay on current card for all ratings
-    // Inform parent app to sync stats/database
+    // 2. Advance to the next card immediately without resetting session
+    if (currentIndex < deck.length - 1) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setIsFlipped(false);
+      try {
+        localStorage.setItem(getIndexStorageKey(filterMode), String(nextIndex));
+      } catch (e) {}
+    } else {
+      setIsDeckCompleted(true);
+      setIsFlipped(false);
+      try {
+        localStorage.removeItem(getIndexStorageKey(filterMode));
+      } catch (e) {}
+    }
+
+    // 3. Inform parent app to sync stats
     onRefreshWords();
   };
 
@@ -207,6 +256,9 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
     setCurrentIndex(0);
     setIsFlipped(false);
     setIsDeckCompleted(false);
+    try {
+      localStorage.setItem(getIndexStorageKey(filterMode), '0');
+    } catch (e) {}
   };
 
   if (words.length === 0) {
@@ -592,19 +644,25 @@ export const Flashcards: React.FC<FlashcardsProps> = ({
 
                     <button
                       onClick={() => handleRate('hard')}
-                      className="group flex flex-col items-center justify-center p-3 rounded-2xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-300 transition-all active:scale-95"
+                      className="group flex flex-col items-center justify-center p-3 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 transition-all active:scale-95 shadow-lg shadow-amber-500/5 ring-1 ring-amber-500/30"
                     >
-                      <span className="text-xs sm:text-sm font-bold">Hard</span>
-                      <span className="text-[10px] text-orange-400/80 mt-0.5">2 kun</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs sm:text-sm font-bold">Hard</span>
+                        <span className="text-[11px]">🔥</span>
+                      </div>
+                      <span className="text-[10px] text-amber-400/90 mt-0.5">Tezroq qaytarish</span>
                       <span className="text-[9px] text-slate-500 hidden sm:inline">[2]</span>
                     </button>
 
                     <button
                       onClick={() => handleRate('good')}
-                      className="group flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 transition-all active:scale-95"
+                      className="group flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 transition-all active:scale-95 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/40"
                     >
-                      <span className="text-xs sm:text-sm font-bold">Good</span>
-                      <span className="text-[10px] text-emerald-400/80 mt-0.5">4 kun</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs sm:text-sm font-bold">Good</span>
+                        <span className="text-[11px]">✅</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 mt-0.5">Keyingi so'z &rarr;</span>
                       <span className="text-[9px] text-slate-500 hidden sm:inline">[3]</span>
                     </button>
 
