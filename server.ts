@@ -258,6 +258,115 @@ Format guidelines:
   }
 });
 
+// Endpoint: AI Speaking Buddy chat conversation
+app.post('/api/speaking-buddy/chat', async (req, res) => {
+  try {
+    const { message, history = [], level = 0, userName = '' } = req.body;
+
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const ai = getGeminiClient();
+
+    const formattedHistory = (history || [])
+      .slice(-6)
+      .map((h: any) => `${h.sender === 'ai' ? 'AI' : 'User'}: ${h.englishText || h.text || ''}`)
+      .join('\n');
+
+    const systemPrompt = `You are "AI Speaking Buddy", a friendly, supportive, and kind English-speaking partner for an Uzbek student learning English from absolute zero (Level 0 - Absolute Beginner).
+
+CORE RULES:
+1. Speak in VERY SIMPLE, natural English (short sentences, 1-2 sentences maximum).
+2. Ask only ONE simple question at a time.
+3. Every English response MUST include its exact Uzbek translation underneath.
+4. If the user made an English grammar or word mistake (e.g. "I good" instead of "I am good"), give a GENTLE, ENCOURAGING correction. Never scold or say "WRONG!".
+5. Provide 2-3 easy answer suggestions for the user (both in English and Uzbek).
+6. Be friendly, warm, like a close friend practicing English over tea. User's name if known: "${userName}".
+7. Current Level: Level ${level} (0 = Absolute Beginner, 1 = Beginner+, 2 = Elementary).
+
+Recent Conversation Context:
+${formattedHistory}
+
+User's Latest Message:
+"${message}"
+
+Provide a JSON object conforming to:
+{
+  "englishText": "Short, friendly AI response in English with ONE question",
+  "uzbekText": "Natural Uzbek translation of the English response",
+  "gentleCorrection": null or { "original": "user mistake", "corrected": "correct sentence", "explanationUz": "simple Uzbek explanation" },
+  "suggestions": [
+    { "english": "suggestion 1", "uzbek": "translation 1" },
+    { "english": "suggestion 2", "uzbek": "translation 2" },
+    { "english": "suggestion 3", "uzbek": "translation 3" }
+  ],
+  "keyVocabulary": [
+    { "word": "english word", "translation": "uzbek word", "partOfSpeech": "noun/verb/etc" }
+  ]
+}`;
+
+    const payload = {
+      contents: systemPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            englishText: { type: Type.STRING },
+            uzbekText: { type: Type.STRING },
+            gentleCorrection: {
+              type: Type.OBJECT,
+              properties: {
+                original: { type: Type.STRING },
+                corrected: { type: Type.STRING },
+                explanationUz: { type: Type.STRING },
+              },
+            },
+            suggestions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  english: { type: Type.STRING },
+                  uzbek: { type: Type.STRING },
+                },
+                required: ['english', 'uzbek'],
+              },
+            },
+            keyVocabulary: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  word: { type: Type.STRING },
+                  translation: { type: Type.STRING },
+                  partOfSpeech: { type: Type.STRING },
+                },
+                required: ['word', 'translation'],
+              },
+            },
+          },
+          required: ['englishText', 'uzbekText', 'suggestions'],
+        },
+      },
+    };
+
+    const response = await generateContentWithFallback(ai, payload);
+    const parsed = JSON.parse(response.text || '{}');
+
+    res.json({
+      success: true,
+      data: parsed,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/speaking-buddy/chat:', error);
+    res.status(500).json({
+      error: error?.message || 'AI suhbatdosh xatoligi.',
+    });
+  }
+});
+
 // Vite middleware in dev or static files in production
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';

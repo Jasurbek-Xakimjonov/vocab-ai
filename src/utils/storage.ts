@@ -4,6 +4,7 @@ import { INITIAL_IRREGULAR_VERBS } from '../data/irregularVerbsData';
 import { GrammarProgressRecord } from '../types/grammar';
 import { SpeakingResult } from '../types/speaking';
 import { VideoProgressState } from '../types/speakingVideos';
+import { SpeakingBuddyUserState, SpeakingSessionRecord, SpeakingBuddyLevel } from '../types/speakingBuddy';
 import { DatabaseService } from '../services/databaseService';
 
 const WORDS_STORAGE_KEY = 'vocabai_words_v1';
@@ -13,6 +14,7 @@ const IRREGULAR_VERBS_KEY = 'vocabai_irregular_verbs_v1';
 const GRAMMAR_PROGRESS_KEY = 'vocabai_grammar_progress_v1';
 const SPEAKING_HISTORY_KEY = 'vocabai_speaking_history_v1';
 const VIDEO_PROGRESS_KEY = 'vocabai_video_progress_v1';
+const SPEAKING_BUDDY_KEY = 'vocabai_speaking_buddy_v1';
 
 export const INITIAL_VOCABULARY: VocabularyWord[] = [
   // Preserving user's original 20 words with high-fidelity enrichments
@@ -470,6 +472,10 @@ export const Storage = {
 
   getVideoKey(): string {
     return currentUserId ? `vocabai_${currentUserId}_video_progress_v1` : VIDEO_PROGRESS_KEY;
+  },
+
+  getSpeakingBuddyKey(): string {
+    return currentUserId ? `vocabai_${currentUserId}_speaking_buddy_v1` : SPEAKING_BUDDY_KEY;
   },
 
   async syncUserVocabulary(userId: string): Promise<void> {
@@ -1102,5 +1108,89 @@ export const Storage = {
     const words = this.getWords();
     const clean = word.toLowerCase().trim();
     return words.some((w) => w.word.toLowerCase().trim() === clean);
+  },
+
+  // ================= AI Speaking Buddy Progress =================
+  getSpeakingBuddyState(): SpeakingBuddyUserState {
+    try {
+      const raw = localStorage.getItem(this.getSpeakingBuddyKey());
+      if (!raw) {
+        return {
+          currentLevel: 0,
+          currentStreak: 1,
+          bestStreak: 1,
+          lastPracticeDate: new Date().toISOString(),
+          totalConversationsCompleted: 0,
+          totalWordsPracticed: 0,
+          totalSpeakingTimeSeconds: 0,
+          sessions: [],
+        };
+      }
+      return JSON.parse(raw);
+    } catch (e) {
+      return {
+        currentLevel: 0,
+        currentStreak: 1,
+        bestStreak: 1,
+        lastPracticeDate: new Date().toISOString(),
+        totalConversationsCompleted: 0,
+        totalWordsPracticed: 0,
+        totalSpeakingTimeSeconds: 0,
+        sessions: [],
+      };
+    }
+  },
+
+  saveSpeakingBuddyState(state: SpeakingBuddyUserState): void {
+    try {
+      localStorage.setItem(this.getSpeakingBuddyKey(), JSON.stringify(state));
+      window.dispatchEvent(new Event('vocabai_speaking_buddy_updated'));
+    } catch (e) {
+      console.error('Failed saving speaking buddy state:', e);
+    }
+  },
+
+  recordSpeakingBuddySession(session: SpeakingSessionRecord): void {
+    const state = this.getSpeakingBuddyState();
+    state.sessions.unshift(session);
+    state.totalConversationsCompleted += 1;
+    state.totalWordsPracticed += session.wordsPracticed;
+    state.totalSpeakingTimeSeconds += session.durationSeconds;
+
+    // Check streak
+    const today = new Date().toISOString().split('T')[0];
+    const lastDate = state.lastPracticeDate ? state.lastPracticeDate.split('T')[0] : null;
+
+    if (!lastDate) {
+      state.currentStreak = 1;
+    } else if (lastDate !== today) {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      if (lastDate === yesterday) {
+        state.currentStreak += 1;
+      } else {
+        state.currentStreak = 1;
+      }
+    }
+
+    state.bestStreak = Math.max(state.bestStreak, state.currentStreak);
+    state.lastPracticeDate = new Date().toISOString();
+
+    // Level progression: If completed 3+ sessions with score >= 80%, suggest or unlock next level
+    if (state.sessions.length >= 3 && state.currentLevel === 0) {
+      const recentAvg =
+        state.sessions.slice(0, 3).reduce((acc, s) => acc + s.score, 0) / 3;
+      if (recentAvg >= 75) {
+        state.currentLevel = 1;
+      }
+    }
+
+    this.saveSpeakingBuddyState(state);
+    this.incrementReviewedCount();
+  },
+
+  setSpeakingBuddyLevel(level: SpeakingBuddyLevel): void {
+    const state = this.getSpeakingBuddyState();
+    state.currentLevel = level;
+    this.saveSpeakingBuddyState(state);
   },
 };

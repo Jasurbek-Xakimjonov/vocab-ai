@@ -11,6 +11,7 @@ import {
   Mic,
   GraduationCap,
   Film,
+  Bot,
   LogOut,
 } from 'lucide-react';
 import { UserStats } from '../types/vocabulary';
@@ -23,6 +24,7 @@ export type NavTab =
   | 'irregular-verbs'
   | 'speaking'
   | 'speaking-videos'
+  | 'ai-speaking'
   | 'grammar'
   | 'practice'
   | 'progress'
@@ -87,6 +89,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Speaking Videos',
       sublabel: '🎬 Video & Nutq',
       icon: Film,
+      highlight: true,
+    },
+    {
+      id: 'ai-speaking' as NavTab,
+      label: 'AI Speaking Buddy',
+      sublabel: '🗣️ AI Suhbatdosh',
+      icon: Bot,
       highlight: true,
     },
     {
