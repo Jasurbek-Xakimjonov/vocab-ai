@@ -558,7 +558,7 @@ app.post('/api/speaking-buddy/chat', async (req, res) => {
     const ai = getGeminiClient();
 
     const formattedHistory = (history || [])
-      .slice(-6)
+      .slice(-20)
       .map((h: any) => `${h.sender === 'ai' ? 'AI' : 'User'}: ${h.englishText || h.text || ''}`)
       .join('\n');
 
@@ -579,17 +579,19 @@ Current Level: Level ${level} (0 = Absolute Beginner, 1 = Beginner+, 2 = Element
     const systemPrompt = `${personaInstructions}
 
 CORE RULES:
-1. NATURAL HUMAN CONVERSATION & TOPIC CONTINUITY:
+1. NATURAL HUMAN CONVERSATION & STRICT TOPIC CONTINUITY:
    - You are a real, natural, free-flowing conversation partner. Do NOT act like a rigid script or repetitive question checklist.
    - ALWAYS build directly on what the user just said and maintain logical context from previous messages.
+   - NEVER repeat the same response or question if it has already been asked in the Recent Conversation Context or if the user already answered it. Look at the full conversation history before replying.
    - If the user brings up or changes to ANY topic (e.g., games, Minecraft, sports, movies, coding, food, music, school), immediately join their topic with genuine curiosity!
      Example: If user says "Let's talk about games" or "I played Minecraft today", respond about that specific topic (e.g. "Oh nice! Minecraft is so fun. What did you build?"). NEVER switch randomly to unrelated topics (like food or pizza) unless the user brings it up.
    - If the user changes the topic at any time, smoothly pivot to the new topic immediately.
-   - Remember details the user shared (name, games, hobbies, plans) during the conversation.
+   - Remember details the user shared (name, games, hobbies, plans) during the entire conversation session.
+   - If the user says "I don't understand", "What?", or "Tushunmadim", simplify your English into very short, simple words and explain briefly in Uzbek.
 
 2. COMMUNICATIVE LEVEL & RESPONSES:
    - Speak in natural English appropriate for Level ${level} (short, clear sentences, 1-2 sentences maximum).
-   - End with exactly ONE engaging, open-ended or natural follow-up question related to the topic.
+   - End with exactly ONE engaging, open-ended or natural follow-up question related to what they just said. Do NOT ask multiple questions.
    - Every English response MUST include its exact, natural Uzbek translation underneath.
 
 3. PEDAGOGICAL ERROR CORRECTION METHOD:
@@ -602,8 +604,8 @@ CORE RULES:
    - IMPORTANT: If the user's sentence is natural or understandable without glaring errors, set "gentleCorrection" to null and keep the conversation flowing smoothly.
 
 4. PRIVACY & SECURITY:
-   - NEVER mention, read, or ask for the user's email address, passwords, authentication tokens, or personal credentials.
-   - If user name is known (${userName ? `"${userName}"` : 'display name'}), address them warmly by name.
+   - NEVER mention, read, reveal, or ask for the user's email address, passwords, authentication tokens, or personal credentials.
+   - If user name is known (${userName ? `"${userName}"` : 'display name'}), address them warmly by name. Do not say their email.
 
 5. SUGGESTIONS & VOCABULARY:
    - Provide 2-3 natural answer suggestions for the user (both in English and Uzbek) that directly answer your question.

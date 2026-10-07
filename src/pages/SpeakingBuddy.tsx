@@ -70,8 +70,9 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
 
-  // Pure Voice States:
-  // idle -> listening -> thinking (processing) -> speaking -> finished
+  // Continuous Hands-Free Conversation States:
+  // idle -> listening -> thinking (processing) -> speaking -> listening ...
+  const [isContinuousActive, setIsContinuousActive] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -79,9 +80,26 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
   const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [lastUserTranscript, setLastUserTranscript] = useState('');
 
+  // Stable references for event listeners without stale closures
   const recognitionRef = useRef<any>(null);
   const recordingTimerRef = useRef<any>(null);
+  const autoRestartTimeoutRef = useRef<any>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  const isContinuousActiveRef = useRef(false);
+  const isAiSpeakingRef = useRef(false);
+  const isLoadingRef = useRef(false);
+  const isRecordingRef = useRef(false);
+
+  // Sync state refs
+  const messagesRef = useRef<BuddyMessage[]>([]);
+  const contextRef = useRef<EngineContext>({
+    topicId: BUDDY_TOPICS[0].id,
+    turnCount: 0,
+    userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
+  });
+  const buddyStateRef = useRef<SpeakingBuddyUserState>(Storage.getSpeakingBuddyState());
+  const activeTopicRef = useRef<BuddyTopic>(BUDDY_TOPICS[0]);
 
   // Session stats tracking
   const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
@@ -97,10 +115,29 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
     userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
   });
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
+  useEffect(() => {
+    activeTopicRef.current = activeTopic;
+  }, [activeTopic]);
+
+  useEffect(() => {
+    buddyStateRef.current = buddyState;
+  }, [buddyState]);
+
   // Sync state on updates
   useEffect(() => {
     const handleUpdate = () => {
-      setBuddyState(Storage.getSpeakingBuddyState());
+      const updated = Storage.getSpeakingBuddyState();
+      setBuddyState(updated);
+      buddyStateRef.current = updated;
     };
     window.addEventListener('vocabai_speaking_buddy_updated', handleUpdate);
     return () => {
@@ -113,185 +150,127 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, isAiSpeaking]);
 
-  // Speech Recognition Setup
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  // Safely stop listening
+  const stopListening = (abort = false) => {
+    if (autoRestartTimeoutRef.current) {
+      clearTimeout(autoRestartTimeoutRef.current);
+      autoRestartTimeoutRef.current = null;
+    }
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    try {
+      if (abort) {
+        recognitionRef.current?.abort();
+      } else {
+        recognitionRef.current?.stop();
+      }
+    } catch {}
+  };
 
-    if (!SpeechRecognition) {
-      setSpeechSupported(false);
-      return;
+  // Safely start listening
+  const startListening = () => {
+    if (isAiSpeakingRef.current || isLoadingRef.current) return;
+    if (!speechSupported) return;
+
+    if (autoRestartTimeoutRef.current) {
+      clearTimeout(autoRestartTimeoutRef.current);
+      autoRestartTimeoutRef.current = null;
     }
 
     try {
-      const recognizer = new SpeechRecognition();
-      recognizer.continuous = false;
-      recognizer.interimResults = false;
-      recognizer.lang = 'en-US';
-
-      recognizer.onstart = () => {
-        setIsRecording(true);
-        setMicPermissionDenied(false);
-        setRecordingSeconds(0);
-        recordingTimerRef.current = setInterval(() => {
-          setRecordingSeconds((prev) => prev + 1);
-        }, 1000);
-      };
-
-      recognizer.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setLastUserTranscript(transcript);
-          handleVoiceInput(transcript);
-        }
-        stopRecording();
-      };
-
-      recognizer.onerror = (event: any) => {
-        stopRecording();
-        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-          setMicPermissionDenied(true);
-          toast.error("Microphone permission is required for AI Speaking.");
-        } else if (event.error === 'no-speech') {
-          // Handled gently without toast spam
-        } else {
-          console.warn('Speech recognition warning:', event.error);
-        }
-      };
-
-      recognizer.onend = () => {
-        stopRecording();
-      };
-
-      recognitionRef.current = recognizer;
-    } catch {
-      setSpeechSupported(false);
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {}
+      if (isRecordingRef.current) {
+        return; // Already listening
       }
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
-    };
-  }, [context, activeTopic, messages]);
-
-  // Start voice recording
-  const startRecording = () => {
-    if (isAiSpeaking) {
-      stopSpeaking();
-      setIsAiSpeaking(false);
-    }
-
-    if (!speechSupported) {
-      toast.error("Ushbu brauzerda ovoz tanish qo'llab-quvvatlanmaydi. Chrome yoki Edge brauzeridan foydalaning.");
-      return;
-    }
-
-    try {
       recognitionRef.current?.start();
     } catch (e) {
-      console.warn('Recognition start retry:', e);
       try {
         recognitionRef.current?.abort();
-        setTimeout(() => recognitionRef.current?.start(), 150);
+        setTimeout(() => {
+          if (isContinuousActiveRef.current && !isAiSpeakingRef.current && !isLoadingRef.current) {
+            try {
+              recognitionRef.current?.start();
+            } catch {}
+          }
+        }, 150);
       } catch {}
     }
   };
 
-  // Stop voice recording
-  const stopRecording = () => {
-    setIsRecording(false);
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-    }
-    try {
-      recognitionRef.current?.stop();
-    } catch {}
+  // Stop continuous session completely
+  const stopContinuousSession = () => {
+    setIsContinuousActive(false);
+    isContinuousActiveRef.current = false;
+    stopSpeaking();
+    setIsAiSpeaking(false);
+    isAiSpeakingRef.current = false;
+    stopListening(true);
   };
 
-  // Speak AI text out loud with echo prevention
+  // Speak AI text out loud with echo prevention and auto-resume loop
   const playAiVoice = (text: string, onDone?: () => void) => {
     // Prevent mic from recording speaker sound
-    stopRecording();
+    stopListening(true);
     stopSpeaking();
     setIsAiSpeaking(true);
+    isAiSpeakingRef.current = true;
 
     speakWithCallbacks(text, {
       rate: 0.9,
-      onStart: () => setIsAiSpeaking(true),
+      onStart: () => {
+        setIsAiSpeaking(true);
+        isAiSpeakingRef.current = true;
+      },
       onEnd: () => {
         setIsAiSpeaking(false);
+        isAiSpeakingRef.current = false;
         if (onDone) onDone();
+
+        // AUTOMATIC CYCLE: when AI finishes speaking, immediately resume listening!
+        if (isContinuousActiveRef.current && !isLoadingRef.current) {
+          autoRestartTimeoutRef.current = setTimeout(() => {
+            if (isContinuousActiveRef.current && !isAiSpeakingRef.current && !isLoadingRef.current) {
+              startListening();
+            }
+          }, 350);
+        }
       },
       onError: () => {
         setIsAiSpeaking(false);
+        isAiSpeakingRef.current = false;
         if (onDone) onDone();
+
+        if (isContinuousActiveRef.current && !isLoadingRef.current) {
+          autoRestartTimeoutRef.current = setTimeout(() => {
+            if (isContinuousActiveRef.current && !isAiSpeakingRef.current && !isLoadingRef.current) {
+              startListening();
+            }
+          }, 350);
+        }
       },
     });
-  };
-
-  // Start / Restart Session
-  const handleStartSession = (topic?: BuddyTopic) => {
-    const chosenTopic = topic || activeTopic;
-    setActiveTopic(chosenTopic);
-    setIsSessionActive(true);
-    setSessionStartTime(Date.now());
-    setQuestionsAnswered(0);
-    setDiscoveredWords([]);
-    setLastUserTranscript('');
-
-    const initialMsg: BuddyMessage = {
-      id: `msg_init_${Date.now()}`,
-      sender: 'ai',
-      englishText: chosenTopic.initialMessage.english,
-      uzbekText: chosenTopic.initialMessage.uzbek,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      suggestions: chosenTopic.sampleSuggestions,
-    };
-
-    setMessages([initialMsg]);
-    setContext({
-      topicId: chosenTopic.id,
-      turnCount: 0,
-      userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
-    });
-
-    // Voice speaking starts automatically
-    playAiVoice(chosenTopic.initialMessage.english);
-  };
-
-  // Safe topic selector with PRO permission gate
-  const handleSelectTopic = (topic: BuddyTopic) => {
-    if ((topic.isPro || topic.category === 'roleplay') && !isPro) {
-      setUpgradeHighlight(`🎭 ${topic.title} (PRO Rolli suhbat)`);
-      setShowUpgradeModal(true);
-      return;
-    }
-    if (topic.level > 0 && !isPro) {
-      setUpgradeHighlight(`🌱 Level ${topic.level} suhbatlari`);
-      setShowUpgradeModal(true);
-      return;
-    }
-    handleStartSession(topic);
   };
 
   // Process user voice input
   const handleVoiceInput = async (spokenText: string) => {
     const clean = spokenText.trim();
-    if (!clean || isLoading) return;
+    if (!clean || isLoadingRef.current) return;
 
     // Check if free user is out of speaking limit
     if (!isPro && speakingUsage && !speakingUsage.canSpeak) {
+      stopContinuousSession();
       toast.error(`Kunlik bepul ${speakingUsage.limitMinutes} daqiqalik suhbat limitingiz tugadi.`);
       setUpgradeHighlight("Kunlik 10 daqiqalik cheklov tugadi");
       setShowUpgradeModal(true);
       return;
     }
+
+    // Switch to Thinking state
+    setIsLoading(true);
+    isLoadingRef.current = true;
 
     const userMsg: BuddyMessage = {
       id: `msg_user_${Date.now()}`,
@@ -301,14 +280,14 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    const newMessages = [...messages, userMsg];
+    const newMessages = [...messagesRef.current, userMsg];
     setMessages(newMessages);
-    setIsLoading(true);
+    messagesRef.current = newMessages;
     setQuestionsAnswered((prev) => prev + 1);
 
-    // Call server endpoint
+    // Call server endpoint with full session history (up to last 20 messages)
     let aiResponseMsg: BuddyMessage | null = null;
-    let nextCtx = { ...context, turnCount: context.turnCount + 1 };
+    let nextCtx = { ...contextRef.current, turnCount: contextRef.current.turnCount + 1 };
 
     try {
       const res = await fetch('/api/speaking-buddy/chat', {
@@ -317,18 +296,20 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
         body: JSON.stringify({
           userId: user?.id,
           message: clean,
-          history: newMessages.slice(-6),
-          level: buddyState.currentLevel,
-          userName: context.userName,
-          category: activeTopic.category || 'basic',
-          characterRole: activeTopic.characterRole || '',
-          topicTitle: activeTopic.title,
+          history: newMessages.slice(-20),
+          level: buddyStateRef.current.currentLevel,
+          userName: contextRef.current.userName,
+          category: activeTopicRef.current.category || 'basic',
+          characterRole: activeTopicRef.current.characterRole || '',
+          topicTitle: activeTopicRef.current.title,
         }),
       });
 
       if (res.status === 403) {
         const errJson = await res.json();
         setIsLoading(false);
+        isLoadingRef.current = false;
+        stopContinuousSession();
         if (errJson.limitReached) {
           toast.error(errJson.error);
           setUpgradeHighlight("Kunlik 10 daqiqalik cheklov tugadi");
@@ -361,17 +342,21 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
       console.warn('Server voice analysis note, using smart local engine:', e);
     }
 
-    // Fallback to local intelligent conversation engine
+    // Fallback to local intelligent conversation engine if needed
     if (!aiResponseMsg) {
-      const result = generateBuddyResponse(clean, newMessages, context);
+      const result = generateBuddyResponse(clean, newMessages, contextRef.current);
       aiResponseMsg = result.message;
       nextCtx = result.updatedContext;
     }
 
     setContext(nextCtx);
+    contextRef.current = nextCtx;
     setIsLoading(false);
+    isLoadingRef.current = false;
 
-    setMessages((prev) => [...prev, aiResponseMsg!]);
+    const updatedWithAi = [...newMessages, aiResponseMsg];
+    setMessages(updatedWithAi);
+    messagesRef.current = updatedWithAi;
 
     // Track newly discovered words
     if (aiResponseMsg.keyVocabulary && aiResponseMsg.keyVocabulary.length > 0) {
@@ -385,14 +370,189 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
     }
 
     // Voice response composition:
-    // If user made a mistake, voice says:
-    // "Almost correct! You should say: [Correct]. Now please repeat: [Correct]."
     let spokenOutput = aiResponseMsg.englishText;
     if (aiResponseMsg.gentleCorrection) {
       spokenOutput = `${aiResponseMsg.gentleCorrection.motivation || 'Almost correct!'} You should say: ${aiResponseMsg.gentleCorrection.corrected}. Now please repeat: ${aiResponseMsg.gentleCorrection.corrected}`;
     }
 
+    // AI speaks, and upon completion automatically resumes listening!
     playAiVoice(spokenOutput);
+  };
+
+  // Speech Recognition Setup (stable on mount)
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
+    }
+
+    try {
+      const recognizer = new SpeechRecognition();
+      recognizer.continuous = false;
+      recognizer.interimResults = false;
+      recognizer.lang = 'en-US';
+
+      recognizer.onstart = () => {
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setMicPermissionDenied(false);
+        setRecordingSeconds(0);
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingSeconds((prev) => prev + 1);
+        }, 1000);
+      };
+
+      recognizer.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim()) {
+          setLastUserTranscript(transcript.trim());
+          stopListening(false);
+          handleVoiceInput(transcript.trim());
+        }
+      };
+
+      recognizer.onerror = (event: any) => {
+        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+          stopContinuousSession();
+          setMicPermissionDenied(true);
+          toast.error("Microphone permission is required for AI Speaking.");
+          return;
+        }
+
+        if (event.error === 'no-speech') {
+          // Handled gently, onend will trigger auto-restart if continuous is active
+          return;
+        }
+
+        if (event.error === 'aborted') {
+          // Intentional stop
+          return;
+        }
+
+        console.warn('Speech recognition notice:', event.error);
+      };
+
+      recognizer.onend = () => {
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+
+        // If continuous session is active and not thinking or AI speaking, auto-resume listening!
+        if (isContinuousActiveRef.current && !isAiSpeakingRef.current && !isLoadingRef.current) {
+          autoRestartTimeoutRef.current = setTimeout(() => {
+            if (isContinuousActiveRef.current && !isAiSpeakingRef.current && !isLoadingRef.current) {
+              startListening();
+            }
+          }, 250);
+        }
+      };
+
+      recognitionRef.current = recognizer;
+    } catch {
+      setSpeechSupported(false);
+    }
+
+    return () => {
+      stopContinuousSession();
+    };
+  }, []);
+
+  // Start continuous conversation session
+  const startContinuousSession = () => {
+    if (!speechSupported) {
+      toast.error("Ushbu brauzerda ovoz tanish qo'llab-quvvatlanmaydi. Chrome yoki Edge brauzeridan foydalaning.");
+      return;
+    }
+
+    setIsContinuousActive(true);
+    isContinuousActiveRef.current = true;
+    setIsSessionActive(true);
+
+    // If session hasn't been initialized with greetings, start topic session
+    if (messages.length === 0) {
+      handleStartSession(activeTopic);
+      return;
+    }
+
+    // If AI is currently speaking, do not interrupt; it will auto-listen on end
+    if (isAiSpeakingRef.current) return;
+    if (isLoadingRef.current) return;
+
+    startListening();
+  };
+
+  // Toggle continuous conversation on big microphone button
+  const handleToggleContinuousVoice = () => {
+    if (isContinuousActive) {
+      // Second click = END conversation
+      stopContinuousSession();
+    } else {
+      // First click = START continuous conversation
+      startContinuousSession();
+    }
+  };
+
+  // Start / Restart Session
+  const handleStartSession = (topic?: BuddyTopic) => {
+    stopSpeaking();
+    stopListening(true);
+    const chosenTopic = topic || activeTopic;
+    setActiveTopic(chosenTopic);
+    activeTopicRef.current = chosenTopic;
+    setIsSessionActive(true);
+    setSessionStartTime(Date.now());
+    setQuestionsAnswered(0);
+    setDiscoveredWords([]);
+    setLastUserTranscript('');
+
+    const initialMsg: BuddyMessage = {
+      id: `msg_init_${Date.now()}`,
+      sender: 'ai',
+      englishText: chosenTopic.initialMessage.english,
+      uzbekText: chosenTopic.initialMessage.uzbek,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      suggestions: chosenTopic.sampleSuggestions,
+    };
+
+    setMessages([initialMsg]);
+    messagesRef.current = [initialMsg];
+
+    const newCtx: EngineContext = {
+      topicId: chosenTopic.id,
+      turnCount: 0,
+      userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
+    };
+    setContext(newCtx);
+    contextRef.current = newCtx;
+
+    // Enable continuous conversation loop
+    setIsContinuousActive(true);
+    isContinuousActiveRef.current = true;
+
+    // Voice speaking starts automatically, and upon completion automatically starts listening!
+    playAiVoice(chosenTopic.initialMessage.english);
+  };
+
+  // Safe topic selector with PRO permission gate
+  const handleSelectTopic = (topic: BuddyTopic) => {
+    if ((topic.isPro || topic.category === 'roleplay') && !isPro) {
+      setUpgradeHighlight(`🎭 ${topic.title} (PRO Rolli suhbat)`);
+      setShowUpgradeModal(true);
+      return;
+    }
+    if (topic.level > 0 && !isPro) {
+      setUpgradeHighlight(`🌱 Level ${topic.level} suhbatlari`);
+      setShowUpgradeModal(true);
+      return;
+    }
+    handleStartSession(topic);
   };
 
   // Safety net: Explain simply with AI voice
@@ -408,8 +568,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
 
   // Finish session and store results
   const handleFinishSession = () => {
-    stopSpeaking();
-    stopRecording();
+    stopContinuousSession();
     const duration = Math.max(1, Math.round((Date.now() - sessionStartTime) / 1000));
     const score = Math.min(100, Math.max(65, 70 + questionsAnswered * 4));
     setFinalSessionScore(score);
@@ -592,16 +751,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
           {/* Interactive Microphone Orb */}
           <button
             type="button"
-            onClick={() => {
-              if (isRecording) {
-                stopRecording();
-              } else if (isAiSpeaking) {
-                stopSpeaking();
-                setIsAiSpeaking(false);
-              } else {
-                startRecording();
-              }
-            }}
+            onClick={handleToggleContinuousVoice}
             className={`relative z-10 w-32 h-32 sm:w-36 sm:h-36 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all duration-300 active:scale-95 select-none ${
               isRecording
                 ? 'bg-gradient-to-tr from-red-600 to-rose-500 text-white ring-8 ring-red-500/30 shadow-red-500/50 scale-105 animate-pulse'
@@ -616,7 +766,9 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
                 ? "Listening... Tap to stop"
                 : isAiSpeaking
                 ? "AI is speaking... Tap to pause"
-                : "Tap to Speak"
+                : isContinuousActive
+                ? "Continuous voice active. Tap to stop"
+                : "Tap to Speak (Start Continuous Conversation)"
             }
           >
             {isRecording ? (
@@ -626,11 +778,13 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
                 <span className="font-mono text-xs font-bold mt-0.5">
                   00:{recordingSeconds < 10 ? `0${recordingSeconds}` : recordingSeconds}
                 </span>
+                <span className="text-[10px] text-white/80 font-medium">Tap to stop</span>
               </>
             ) : isAiSpeaking ? (
               <>
                 <Volume2 className="w-9 h-9 animate-bounce mb-1" />
                 <span className="text-xs font-black uppercase tracking-wider">AI Speaking</span>
+                <span className="text-[10px] text-slate-900/80 font-medium">Tap to stop</span>
               </>
             ) : isLoading ? (
               <>
@@ -651,7 +805,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
           {isRecording ? (
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-bold animate-pulse">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-              <span>🔴 Listening... Speak in English</span>
+              <span>🔴 Listening...</span>
             </div>
           ) : isAiSpeaking ? (
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold animate-pulse">
@@ -668,6 +822,29 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
               <Mic className="w-3.5 h-3.5 text-amber-400" />
               <span>Ready to listen</span>
             </div>
+          )}
+        </div>
+
+        {/* Continuous Session Action Controls */}
+        <div className="flex items-center gap-2.5 relative z-10 pt-1">
+          {isContinuousActive ? (
+            <button
+              type="button"
+              onClick={stopContinuousSession}
+              className="px-4 py-2 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95"
+            >
+              <MicOff className="w-4 h-4 text-rose-400" />
+              <span>Suhbatni to'xtatish (Stop)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={startContinuousSession}
+              className="px-4 py-2 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-2 transition-all shadow-md active:scale-95"
+            >
+              <Mic className="w-4 h-4 text-slate-950" />
+              <span>Suhbatni boshlash (Start)</span>
+            </button>
           )}
         </div>
 

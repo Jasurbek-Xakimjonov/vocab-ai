@@ -668,8 +668,20 @@ export function generateBuddyResponse(
 
   const name = newContext.userName ? newContext.userName : '';
 
-  // Step-by-step beginner friendly dialog states
-  if (context.turnCount === 0 || lower.includes('hello') || lower.includes('hi')) {
+  // Check if user did not understand previous utterance
+  if (lower.includes("don't understand") || lower.includes("dont understand") || lower.includes("tushunmadim") || lower.includes("not understand") || lower.includes("what does that mean")) {
+    englishText = `No worries! Let's make it simpler. 😊 How are you feeling today?`;
+    uzbekText = `Hechqisi yo'q! Oddiyroq qilib aytaman. 😊 Bugun o'zingizni qanday his qilyapsiz?`;
+    suggestions = [
+      { english: 'I feel good.', uzbek: "O'zimni yaxshi his qilyapman." },
+      { english: 'I feel happy.', uzbek: 'Men xursandman.' },
+      { english: 'I am tired.', uzbek: 'Men charchadim.' },
+    ];
+    keyVocabulary = [
+      { word: 'feel', translation: 'his qilmoq', pronunciation: '/fiːl/', partOfSpeech: 'verb' },
+      { word: 'simpler', translation: 'osonroq, oddiyroq', pronunciation: '/ˈsɪm.plɚ/', partOfSpeech: 'adjective' },
+    ];
+  } else if (context.turnCount === 0 || lower.includes('hello') || lower.includes('hi')) {
     if (lower.includes('good') || lower.includes('fine') || lower.includes('great')) {
       englishText = `That's great! 😊 What is your name?`;
       uzbekText = `Bu juda yaxshi! 😊 Isming nima?`;
