@@ -692,6 +692,16 @@ Provide a JSON object conforming strictly to:
     try {
       const response = await generateContentWithFallback(ai, payload);
       parsed = JSON.parse(response.text || '{}');
+
+      // Validate gentleCorrection: only preserve if a real correction with difference was generated
+      if (parsed.gentleCorrection) {
+        const corr = parsed.gentleCorrection;
+        const orig = (corr.original || message).trim().toLowerCase();
+        const fixed = (corr.corrected || '').trim().toLowerCase();
+        if (!corr.corrected || orig === fixed) {
+          parsed.gentleCorrection = null;
+        }
+      }
     } catch (genErr: any) {
       console.warn('Gemini temporary spike/failure, using built-in resilient tutor engine:', genErr?.message);
       

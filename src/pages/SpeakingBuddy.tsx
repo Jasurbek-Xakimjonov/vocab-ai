@@ -371,8 +371,9 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
 
     // Voice response composition:
     let spokenOutput = aiResponseMsg.englishText;
-    if (aiResponseMsg.gentleCorrection) {
-      spokenOutput = `${aiResponseMsg.gentleCorrection.motivation || 'Almost correct!'} You should say: ${aiResponseMsg.gentleCorrection.corrected}. Now please repeat: ${aiResponseMsg.gentleCorrection.corrected}`;
+    const corr = aiResponseMsg.gentleCorrection;
+    if (corr && corr.corrected && corr.corrected.toLowerCase().trim() !== clean.toLowerCase()) {
+      spokenOutput = `${corr.motivation || 'Almost correct!'} You should say: ${corr.corrected}. Now please repeat: ${corr.corrected}`;
     }
 
     // AI speaks, and upon completion automatically resumes listening!
@@ -937,7 +938,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
                   )}
 
                   {/* Pedagogical Correction Box */}
-                  {m.gentleCorrection && (
+                  {m.gentleCorrection && m.gentleCorrection.corrected && (
                     <div className="mt-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1 text-xs">
                       <div className="flex items-center gap-1.5 font-bold text-amber-300">
                         <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
