@@ -32,9 +32,33 @@ export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
 
-export async function speakWord(text: string, rate: number = 0.9): Promise<void> {
+export function stopSpeaking(): void {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
+  }
+}
+
+export function isSpeaking(): boolean {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    return window.speechSynthesis.speaking;
+  }
+  return false;
+}
+
+export interface SpeakOptions {
+  rate?: number;
+  pitch?: number;
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: (err: any) => void;
+}
+
+export async function speakWithCallbacks(text: string, options: SpeakOptions = {}): Promise<void> {
   if (!isSpeechSupported()) {
     console.warn('Web Speech API is not supported in this browser.');
+    options.onEnd?.();
     return;
   }
 
@@ -60,11 +84,31 @@ export async function speakWord(text: string, rate: number = 0.9): Promise<void>
       utterance.voice = selectedVoice;
     }
     utterance.lang = 'en-US';
-    utterance.rate = rate;
-    utterance.pitch = 1.0;
+    utterance.rate = options.rate ?? 0.9;
+    utterance.pitch = options.pitch ?? 1.0;
+
+    utterance.onstart = () => {
+      options.onStart?.();
+    };
+
+    utterance.onend = () => {
+      options.onEnd?.();
+    };
+
+    utterance.onerror = (e) => {
+      console.warn('Speech error/interrupted:', e);
+      options.onError?.(e);
+      options.onEnd?.();
+    };
 
     window.speechSynthesis.speak(utterance);
   } catch (err) {
     console.error('Speech synthesis error:', err);
+    options.onError?.(err);
+    options.onEnd?.();
   }
+}
+
+export async function speakWord(text: string, rate: number = 0.9): Promise<void> {
+  return speakWithCallbacks(text, { rate });
 }

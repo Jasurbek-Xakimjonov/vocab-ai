@@ -18,6 +18,9 @@ export interface BuddyCorrection {
   original: string;
   corrected: string;
   explanationUz: string;
+  motivation?: string;
+  correctedUz?: string;
+  repeatPrompt?: string;
 }
 
 export interface BuddyVocabItem {
@@ -49,6 +52,9 @@ export interface BuddyTopic {
   icon: string;
   description: string;
   descriptionUz: string;
+  isPro?: boolean;
+  category?: 'basic' | 'roleplay';
+  characterRole?: string;
   initialMessage: {
     english: string;
     uzbek: string;

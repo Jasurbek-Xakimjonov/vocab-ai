@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Film,
   Bot,
+  MessageSquare,
 } from 'lucide-react';
 import { NavTab } from './Sidebar';
 
@@ -21,8 +22,9 @@ interface MobileNavProps {
 export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab }) => {
   const items = [
     { id: 'home' as NavTab, label: 'Asosiy', icon: LayoutDashboard },
+    { id: 'ai-speaking' as NavTab, label: 'Speaking', icon: Mic },
+    { id: 'ai-chat' as NavTab, label: 'AI Chat', icon: MessageSquare },
     { id: 'my-words' as NavTab, label: "Lug'at", icon: BookOpen },
-    { id: 'ai-speaking' as NavTab, label: 'AI Buddy', icon: Bot },
     { id: 'speaking-videos' as NavTab, label: 'Videolar', icon: Film },
     { id: 'flashcards' as NavTab, label: 'Kartalar', icon: Layers },
     { id: 'irregular-verbs' as NavTab, label: "Fe'llar", icon: Zap },

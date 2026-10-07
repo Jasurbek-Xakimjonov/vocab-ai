@@ -12,7 +12,10 @@ import {
   GraduationCap,
   Film,
   Bot,
+  MessageSquare,
   LogOut,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
 import { UserStats } from '../types/vocabulary';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +28,7 @@ export type NavTab =
   | 'speaking'
   | 'speaking-videos'
   | 'ai-speaking'
+  | 'ai-chat'
   | 'grammar'
   | 'practice'
   | 'progress'
@@ -35,6 +39,8 @@ interface SidebarProps {
   onSelectTab: (tab: NavTab) => void;
   stats: UserStats;
   totalWordsCount: number;
+  onOpenUpgradePro?: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
 interface NavItem {
@@ -50,8 +56,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   stats,
   totalWordsCount,
+  onOpenUpgradePro,
+  onOpenAdminPanel,
 }) => {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, subscription, isPro, isAdmin, logout } = useAuth();
 
   const navItems: NavItem[] = [
     {
@@ -93,9 +101,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'ai-speaking' as NavTab,
-      label: 'AI Speaking Buddy',
-      sublabel: '🗣️ AI Suhbatdosh',
+      label: 'AI Speaking',
+      sublabel: '🎙️ Ovozli suhbat',
       icon: Bot,
+      highlight: true,
+    },
+    {
+      id: 'ai-chat' as NavTab,
+      label: 'AI Chat',
+      sublabel: '💬 Matnli AI yordamchi',
+      icon: MessageSquare,
       highlight: true,
     },
     {
@@ -218,6 +233,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
+      {/* Admin Panel Quick Access */}
+      {isAdmin && onOpenAdminPanel && (
+        <div className="px-4 py-2 bg-slate-950/60 border-t border-white/5">
+          <button
+            onClick={onOpenAdminPanel}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-bold text-xs transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-purple-400" />
+              <span>Admin Paneli</span>
+            </div>
+            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-purple-400/20 text-purple-200">
+              Admin
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* PRO Upgrade CTA if user is on Free Plan */}
+      {!isPro && onOpenUpgradePro && (
+        <div className="px-4 py-2 bg-slate-950/40">
+          <button
+            onClick={onOpenUpgradePro}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-amber-400/15 via-amber-500/10 to-transparent border border-amber-400/30 hover:border-amber-400/60 text-amber-300 transition-all text-xs group"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xs">
+                💎
+              </div>
+              <div className="text-left">
+                <div className="font-extrabold text-white text-[11px] group-hover:text-amber-300">
+                  PRO-ga o'ting
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Cheksiz Speaking
+                </div>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+              5,000 so'm
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* User Account / Profile & Logout */}
       {user && (
         <div className="p-3.5 border-t border-white/5 bg-slate-950/80 flex items-center justify-between gap-2.5">
@@ -226,8 +286,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {profile?.name ? profile.name.substring(0, 2).toUpperCase() : 'U'}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-white truncate">
-                {profile?.name || user.email?.split('@')[0]}
+              <div className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                <span className="truncate">{profile?.name || user.email?.split('@')[0]}</span>
+                <span
+                  className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wider uppercase shrink-0 ${
+                    isPro
+                      ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {isPro ? '💎 PRO' : '🌱 FREE'}
+                </span>
               </div>
               <div className="text-[10px] text-slate-400 truncate">
                 {user.email}

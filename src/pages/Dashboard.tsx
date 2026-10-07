@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Film,
   Bot,
+  MessageSquare,
 } from 'lucide-react';
 import { VocabularyWord, UserStats } from '../types/vocabulary';
 import { IrregularVerb } from '../types/irregularVerbs';
@@ -383,24 +384,45 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </div>
 
-          {/* Card 3c: AI Speaking Buddy */}
+          {/* Card: AI Speaking (Voice Only) */}
           <div
             onClick={() => onNavigate('ai-speaking')}
-            className="group p-6 rounded-3xl bg-[#0d1322] border border-amber-400/20 hover:border-amber-400/50 cursor-pointer transition-all hover:-translate-y-1 shadow-xl space-y-3"
+            className="group p-6 rounded-3xl bg-[#0d1322] border border-emerald-500/30 hover:border-emerald-400/60 cursor-pointer transition-all hover:-translate-y-1 shadow-xl space-y-3"
           >
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-300 flex items-center justify-center font-bold">
-              <Bot className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center font-bold">
+              <Mic className="w-6 h-6" />
             </div>
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors">
-                AI Speaking Buddy 🗣️
+              <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors">
+                AI Speaking 🎙️
               </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-emerald-400/20 text-amber-300 border border-amber-400/30 uppercase tracking-wider">
-                Yangi Bo'lim
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                Voice Only
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              AI do'stingiz bilan noldan erkin ingliz tilida suhbatlashing. Har bir jumla ostida o'zbekcha tarjimasi bilan!
+              Faqat ovozli muloqot: siz gapirasiz, AI tinglaydi va ovoz bilan javob beradi.
+            </p>
+          </div>
+
+          {/* Card: AI Chat (Text Only) */}
+          <div
+            onClick={() => onNavigate('ai-chat')}
+            className="group p-6 rounded-3xl bg-[#0d1322] border border-amber-400/20 hover:border-amber-400/50 cursor-pointer transition-all hover:-translate-y-1 shadow-xl space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-300 flex items-center justify-center font-bold">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors">
+                AI Chat 💬
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase tracking-wider">
+                Text Only
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Matn orqali savollar bering, grammatika va so'zlarni batafsil tahlil qiling.
             </p>
           </div>
 

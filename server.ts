@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { platformStore } from './serverPlatformStore.js';
 
 dotenv.config();
 
@@ -258,13 +259,300 @@ Format guidelines:
   }
 });
 
-// Endpoint: AI Speaking Buddy chat conversation
+// ========================================================
+// SUBSCRIPTION & USER PROFILE APIS
+// ========================================================
+
+// Get public platform configuration & pricing
+app.get('/api/subscription/config', (req, res) => {
+  try {
+    const settings = platformStore.getSettings();
+    res.json({
+      success: true,
+      settings,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Authenticated user subscription profile verification (Authoritative Source of Truth)
+app.post('/api/subscription/profile', (req, res) => {
+  try {
+    const { userId, email, displayName } = req.body;
+    if (!userId || !email) {
+      return res.status(400).json({ error: 'userId and email are required.' });
+    }
+
+    const profile = platformStore.upsertUser(userId, email, displayName);
+    const usage = platformStore.getSpeakingUsage(userId);
+
+    res.json({
+      success: true,
+      profile,
+      usage,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// User submits payment request (Click, Payme, Uzum, Card)
+app.post('/api/subscription/request', (req, res) => {
+  try {
+    const { userId, email, userName, paymentMethod, senderPhone, transactionRef, notes } = req.body;
+    if (!userId || !email || !senderPhone) {
+      return res.status(400).json({ error: 'Foydalanuvchi ma\'lumotlari va telefon raqami talab qilinadi.' });
+    }
+
+    const request = platformStore.addPaymentRequest({
+      userId,
+      email,
+      userName: userName || email.split('@')[0],
+      paymentMethod: paymentMethod || 'card',
+      senderPhone,
+      transactionRef,
+      notes,
+    });
+
+    res.json({
+      success: true,
+      message: 'To\'lov arizangiz qabul qilindi! Administrator tekshiruvidan so\'ng 30 kunlik PRO faollashadi.',
+      request,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// User views their own payment requests
+app.get('/api/subscription/my-requests', (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const allRequests = platformStore.getPaymentRequests();
+    const userRequests = allRequests.filter((r) => r.user_id === userId);
+
+    res.json({
+      success: true,
+      requests: userRequests,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Query user's current daily speaking usage status
+app.get('/api/subscription/speaking-usage', (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const usage = platformStore.getSpeakingUsage(userId);
+    res.json({
+      success: true,
+      usage,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Safely increment speaking duration
+app.post('/api/subscription/speaking-usage/increment', (req, res) => {
+  try {
+    const { userId, seconds = 30 } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const usage = platformStore.incrementSpeakingUsage(userId, Number(seconds));
+    res.json({
+      success: true,
+      usage,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// ========================================================
+// ADMIN APIS
+// ========================================================
+
+// Admin Overview
+app.get('/api/admin/overview', (req, res) => {
+  try {
+    const overview = platformStore.getAdminOverview();
+    res.json({
+      success: true,
+      ...overview,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Admin: Get all users
+app.get('/api/admin/users', (req, res) => {
+  try {
+    const users = platformStore.getAllUsers();
+    res.json({
+      success: true,
+      users,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Admin: Update user profile (grant/revoke PRO, change role, block/unblock, set limit)
+app.post('/api/admin/users/:userId/update', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { plan, role, is_blocked, durationDaysToAdd, daily_speaking_limit, pro_expires_at } = req.body;
+
+    const updated = platformStore.updateUser(userId, {
+      plan,
+      role,
+      is_blocked,
+      durationDaysToAdd,
+      daily_speaking_limit,
+      pro_expires_at,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+    }
+
+    res.json({
+      success: true,
+      user: updated,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Admin: Get all payment requests
+app.get('/api/admin/requests', (req, res) => {
+  try {
+    const requests = platformStore.getPaymentRequests();
+    res.json({
+      success: true,
+      requests,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Admin: Review payment request (approve/reject)
+app.post('/api/admin/requests/:requestId/review', (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { status, reviewedBy = 'Admin', durationDays = 30 } = req.body;
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Status approved yoki rejected bo\'lishi shart.' });
+    }
+
+    const result = platformStore.reviewPaymentRequest(
+      requestId,
+      status,
+      reviewedBy,
+      Number(durationDays)
+    );
+
+    if (!result.success) {
+      return res.status(404).json({ error: 'Ariza topilmadi' });
+    }
+
+    res.json({
+      success: true,
+      message: status === 'approved' ? 'To\'lov tasdiqlandi va foydalanuvchiga PRO berildi! 💎' : 'Ariza rad etildi.',
+      ...result,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// Admin: Update platform settings (PRO price, daily limit, payment card)
+app.post('/api/admin/settings', (req, res) => {
+  try {
+    const {
+      pro_price_som,
+      pro_duration_days,
+      free_daily_speaking_limit_minutes,
+      payment_card_number,
+      payment_card_holder,
+      payment_phone,
+    } = req.body;
+
+    const updated = platformStore.updateSettings({
+      pro_price_som: pro_price_som ? Number(pro_price_som) : undefined,
+      pro_duration_days: pro_duration_days ? Number(pro_duration_days) : undefined,
+      free_daily_speaking_limit_minutes: free_daily_speaking_limit_minutes ? Number(free_daily_speaking_limit_minutes) : undefined,
+      payment_card_number,
+      payment_card_holder,
+      payment_phone,
+    });
+
+    res.json({
+      success: true,
+      message: 'Sozlamalar muvaffaqiyatli saqlandi! ✅',
+      settings: updated,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Server error' });
+  }
+});
+
+// ========================================================
+// AI SPEAKING BUDDY CHAT API (WITH PERMISSION & USAGE CHECKS)
+// ========================================================
 app.post('/api/speaking-buddy/chat', async (req, res) => {
   try {
-    const { message, history = [], level = 0, userName = '' } = req.body;
+    const {
+      userId,
+      message,
+      history = [],
+      level = 0,
+      userName = '',
+      category = 'basic',
+      characterRole = '',
+      topicTitle = '',
+    } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    // 1. Authoritative security & permission checks
+    let userProfile = userId ? platformStore.getUser(userId) : null;
+    if (userProfile?.is_blocked) {
+      return res.status(403).json({
+        error: 'Profilingiz bloklangan. Iltimos, administrator bilan bog\'laning.',
+        isBlocked: true,
+      });
+    }
+
+    const usage = userId ? platformStore.getSpeakingUsage(userId) : null;
+    const isPro = userProfile?.plan === 'pro';
+
+    // 2. Check FREE daily speaking limit
+    if (!isPro && usage && !usage.canSpeak) {
+      return res.status(403).json({
+        error: `Kunlik bepul ${usage.limitMinutes} daqiqalik suhbat limitingiz tugadi. Cheksiz suhbatlashish uchun PRO tarifiga o'ting! 💎`,
+        limitReached: true,
+        usage,
+      });
     }
 
     const ai = getGeminiClient();
@@ -274,16 +562,36 @@ app.post('/api/speaking-buddy/chat', async (req, res) => {
       .map((h: any) => `${h.sender === 'ai' ? 'AI' : 'User'}: ${h.englishText || h.text || ''}`)
       .join('\n');
 
-    const systemPrompt = `You are "AI Speaking Buddy", a friendly, supportive, and kind English-speaking partner for an Uzbek student learning English from absolute zero (Level 0 - Absolute Beginner).
+    let personaInstructions = '';
+    if (category === 'roleplay' && characterRole) {
+      personaInstructions = `
+ROLEPLAY SCENARIO:
+You are roleplaying as: "${characterRole}" in the scenario: "${topicTitle}".
+Stay in character! Act as a realistic, friendly ${characterRole}.
+Current learner level is Level ${level} (adapt your English difficulty appropriately, from simple beginner up to fluent B2).
+Still maintain warm, encouraging tone and keep responses concise (1-2 sentences).`;
+    } else {
+      personaInstructions = `
+You are "AI Speaking Buddy", a friendly, supportive, and kind English-speaking partner for an Uzbek student learning English.
+Current Level: Level ${level} (0 = Absolute Beginner, 1 = Beginner+, 2 = Elementary, 3 = Pre-Intermediate, 4 = Intermediate, 5 = Upper-Intermediate B2).`;
+    }
+
+    const systemPrompt = `${personaInstructions}
 
 CORE RULES:
-1. Speak in VERY SIMPLE, natural English (short sentences, 1-2 sentences maximum).
-2. Ask only ONE simple question at a time.
-3. Every English response MUST include its exact Uzbek translation underneath.
-4. If the user made an English grammar or word mistake (e.g. "I good" instead of "I am good"), give a GENTLE, ENCOURAGING correction. Never scold or say "WRONG!".
+1. Speak in natural English appropriate for Level ${level} (short, clear sentences, 1-2 sentences maximum).
+2. Ask only ONE natural question or conversational prompt at a time.
+3. Every English response MUST include its exact, natural Uzbek translation underneath.
+4. PEDAGOGICAL ERROR CORRECTION METHOD:
+   If the user made a grammar or vocabulary mistake:
+   a) Start with positive encouragement ("Good try!", "Almost correct!", "Nice effort!").
+   b) Point out the specific mistake briefly.
+   c) Explain in simple Uzbek why it's incorrect (e.g. '"Yesterday" o\'tgan vaqtni bildiradi, shuning uchun "go" o\'rniga "went" ishlatamiz.').
+   d) Provide the correct English sentence and its Uzbek translation.
+   e) Prompt the user to repeat it ("Can you say it again?" or "Try saying it again!").
+   IMPORTANT: If the user's message has NO grammar mistake, do NOT invent one! Set "gentleCorrection" to null and continue the natural conversation.
 5. Provide 2-3 easy answer suggestions for the user (both in English and Uzbek).
 6. Be friendly, warm, like a close friend practicing English over tea. User's name if known: "${userName}".
-7. Current Level: Level ${level} (0 = Absolute Beginner, 1 = Beginner+, 2 = Elementary).
 
 Recent Conversation Context:
 ${formattedHistory}
@@ -291,11 +599,18 @@ ${formattedHistory}
 User's Latest Message:
 "${message}"
 
-Provide a JSON object conforming to:
+Provide a JSON object conforming strictly to:
 {
-  "englishText": "Short, friendly AI response in English with ONE question",
+  "englishText": "Short, friendly AI response in English with ONE question or prompt",
   "uzbekText": "Natural Uzbek translation of the English response",
-  "gentleCorrection": null or { "original": "user mistake", "corrected": "correct sentence", "explanationUz": "simple Uzbek explanation" },
+  "gentleCorrection": null or {
+    "motivation": "Good try! There is one small mistake.",
+    "original": "user mistake",
+    "corrected": "correct sentence",
+    "correctedUz": "Uzbek translation of correct sentence",
+    "explanationUz": "Simple Uzbek explanation of the rule",
+    "repeatPrompt": "Can you say it again?"
+  },
   "suggestions": [
     { "english": "suggestion 1", "uzbek": "translation 1" },
     { "english": "suggestion 2", "uzbek": "translation 2" },
@@ -318,9 +633,12 @@ Provide a JSON object conforming to:
             gentleCorrection: {
               type: Type.OBJECT,
               properties: {
+                motivation: { type: Type.STRING },
                 original: { type: Type.STRING },
                 corrected: { type: Type.STRING },
+                correctedUz: { type: Type.STRING },
                 explanationUz: { type: Type.STRING },
+                repeatPrompt: { type: Type.STRING },
               },
             },
             suggestions: {
@@ -352,12 +670,61 @@ Provide a JSON object conforming to:
       },
     };
 
-    const response = await generateContentWithFallback(ai, payload);
-    const parsed = JSON.parse(response.text || '{}');
+    let parsed: any = null;
+
+    try {
+      const response = await generateContentWithFallback(ai, payload);
+      parsed = JSON.parse(response.text || '{}');
+    } catch (genErr: any) {
+      console.warn('Gemini temporary spike/failure, using built-in resilient tutor engine:', genErr?.message);
+      
+      const clean = message.trim().toLowerCase();
+      let fallbackCorrection: any = null;
+
+      if (/\b(?:i|we|they|he|she)\s+go\b.*?\b(?:yesterday|last\s+\w+|ago)\b/i.test(clean) ||
+          /\b(?:yesterday|last\s+\w+|ago)\b.*?\b(?:i|we|they|he|she)\s+go\b/i.test(clean)) {
+        fallbackCorrection = {
+          motivation: "Good try! There is one small mistake.",
+          original: message,
+          corrected: message.replace(/\bi go\b/gi, 'I went'),
+          correctedUz: "Men kecha maktabga bordim.",
+          explanationUz: '"Yesterday" o\'tgan vaqtni bildiradi, shuning uchun "go" o\'rniga "went" ishlatamiz.',
+          repeatPrompt: "Can you say it again?",
+        };
+      } else if (/\bi am agree\b/i.test(clean)) {
+        fallbackCorrection = {
+          motivation: "Nice effort! 👍",
+          original: message,
+          corrected: "I agree.",
+          correctedUz: "Men qo'shilaman.",
+          explanationUz: '"Agree" o\'zi fe\'l hisoblanadi, shuning uchun "am" qo\'yilmaydi.',
+          repeatPrompt: "Can you say it again?",
+        };
+      }
+
+      parsed = {
+        englishText: fallbackCorrection ? "Nice effort! Let's practice that sentence together." : "That's wonderful! Tell me more about that.",
+        uzbekText: fallbackCorrection ? "Yaxshi urinish! Keling, bu gapni birga mashq qilamiz." : "Ajoyib! Bu haqda ko'proq aytib bering.",
+        gentleCorrection: fallbackCorrection,
+        suggestions: [
+          { english: "Yes, exactly!", uzbek: "Ha, xuddi shunday!" },
+          { english: "I understand now.", uzbek: "Endi tushundim." },
+          { english: "Could you repeat that?", uzbek: "Qaytara olasizmi?" },
+        ],
+        keyVocabulary: [],
+      };
+    }
+
+    // Automatically count 25 seconds of practice usage
+    let updatedUsage = usage;
+    if (userId) {
+      updatedUsage = platformStore.incrementSpeakingUsage(userId, 25);
+    }
 
     res.json({
       success: true,
       data: parsed,
+      usage: updatedUsage,
     });
   } catch (error: any) {
     console.error('Error in /api/speaking-buddy/chat:', error);

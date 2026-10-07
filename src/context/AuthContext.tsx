@@ -8,6 +8,11 @@ import React, {
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Storage } from '../utils/storage';
+import {
+  UserSubscriptionProfile,
+  SpeakingUsageStatus,
+} from '../types/subscription';
+import { SubscriptionService } from '../services/subscriptionService';
 
 export interface UserProfile {
   id: string;
@@ -20,6 +25,11 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: UserProfile | null;
+  subscription: UserSubscriptionProfile | null;
+  speakingUsage: SpeakingUsageStatus | null;
+  isPro: boolean;
+  isAdmin: boolean;
+  isBlocked: boolean;
   loading: boolean;
   isConfigured: boolean;
   login: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -30,6 +40,8 @@ interface AuthContextType {
   ) => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshSubscription: () => Promise<void>;
+  updateSpeakingUsageState: (usage: SpeakingUsageStatus) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,8 +55,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [subscription, setSubscription] = useState<UserSubscriptionProfile | null>(null);
+  const [speakingUsage, setSpeakingUsage] = useState<SpeakingUsageStatus | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const isConfigured = isSupabaseConfigured();
+
+  // Authoritative computed statuses
+  const isPro = Boolean(
+    subscription?.plan === 'pro' &&
+      (!subscription.pro_expires_at ||
+        new Date(subscription.pro_expires_at).getTime() > Date.now())
+  );
+
+  const isAdmin = Boolean(subscription?.role === 'admin');
+  const isBlocked = Boolean(subscription?.is_blocked);
 
   // Load user profile from public.profiles table
   const fetchProfile = useCallback(async (userId: string, email?: string) => {
@@ -52,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (isConfigured) {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, name, email, created_at')
+          .select('id, name, email, created_at, plan, role, pro_expires_at, is_blocked')
           .eq('id', userId)
           .single();
 
@@ -100,6 +124,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     return fallback;
   }, [isConfigured]);
 
+  // Refresh authoritative subscription from server
+  const refreshSubscription = useCallback(async () => {
+    if (!user) {
+      setSubscription(null);
+      setSpeakingUsage(null);
+      return;
+    }
+    const userEmail = user.email || '';
+    const userMetaName = user.user_metadata?.name || userEmail.split('@')[0];
+    const subData = await SubscriptionService.fetchProfile(
+      user.id,
+      userEmail,
+      userMetaName
+    );
+    setSubscription(subData.profile);
+    setSpeakingUsage(subData.usage);
+  }, [user]);
+
   // Set active user into app & storage
   const handleUserChange = useCallback(
     async (newUser: User | null, newSession: Session | null) => {
@@ -116,9 +158,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           prof.name = userMetaName;
           setProfile({ ...prof });
         }
+
+        // Authoritative subscription fetch
+        const subData = await SubscriptionService.fetchProfile(
+          newUser.id,
+          userEmail,
+          userMetaName
+        );
+        setSubscription(subData.profile);
+        setSpeakingUsage(subData.usage);
       } else {
         Storage.setCurrentUserId(null);
         setProfile(null);
+        setSubscription(null);
+        setSpeakingUsage(null);
       }
     },
     [fetchProfile]
@@ -386,18 +439,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const updateSpeakingUsageState = (usage: SpeakingUsageStatus) => {
+    setSpeakingUsage(usage);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         session,
         profile,
+        subscription,
+        speakingUsage,
+        isPro,
+        isAdmin,
+        isBlocked,
         loading,
         isConfigured,
         login,
         register,
         logout,
         refreshProfile,
+        refreshSubscription,
+        updateSpeakingUsageState,
       }}
     >
       {children}

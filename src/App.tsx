@@ -15,6 +15,7 @@ import { IrregularVerbs } from './pages/IrregularVerbs';
 import { Speaking } from './pages/Speaking';
 import { SpeakingVideos } from './pages/SpeakingVideos';
 import { SpeakingBuddy } from './pages/SpeakingBuddy';
+import { AIChat } from './pages/AIChat';
 import { Grammar } from './pages/Grammar';
 import { Practice } from './pages/Practice';
 import { MyWords } from './pages/MyWords';
@@ -26,12 +27,18 @@ import { GrammarTopic } from './types/grammar';
 import { Storage } from './utils/storage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
+import { UpgradeProModal } from './components/UpgradeProModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 
 export function AppContent() {
   const { user, profile, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [words, setWords] = useState<VocabularyWord[]>([]);
   const [stats, setStats] = useState<UserStats>(() => Storage.getUserStats());
+
+  // Modals
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   // Global search & deep-link states
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -106,6 +113,8 @@ export function AppContent() {
         onSelectTab={setCurrentTab}
         stats={stats}
         totalWordsCount={words.length}
+        onOpenUpgradePro={() => setIsUpgradeModalOpen(true)}
+        onOpenAdminPanel={() => setIsAdminModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -117,6 +126,8 @@ export function AppContent() {
           stats={stats}
           totalWords={words.length}
           onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenUpgradePro={() => setIsUpgradeModalOpen(true)}
+          onOpenAdminPanel={() => setIsAdminModalOpen(true)}
         />
 
         {/* Workspace */}
@@ -153,7 +164,10 @@ export function AppContent() {
           )}
 
           {currentTab === 'speaking' && (
-            <Speaking />
+            <Speaking
+              onRefreshWords={refreshWords}
+              onNavigate={setCurrentTab}
+            />
           )}
 
           {currentTab === 'speaking-videos' && (
@@ -166,6 +180,12 @@ export function AppContent() {
           {currentTab === 'ai-speaking' && (
             <SpeakingBuddy
               onRefreshWords={refreshWords}
+              onNavigate={setCurrentTab}
+            />
+          )}
+
+          {currentTab === 'ai-chat' && (
+            <AIChat
               onNavigate={setCurrentTab}
             />
           )}
@@ -219,6 +239,18 @@ export function AppContent() {
           setSelectedTopicFromSearch(g);
           setCurrentTab('grammar');
         }}
+      />
+
+      {/* PRO Upgrade Modal */}
+      <UpgradeProModal
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+      />
+
+      {/* Admin Management Panel Modal */}
+      <AdminPanelModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
       />
     </div>
   );

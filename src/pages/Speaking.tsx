@@ -18,10 +18,21 @@ import { SPEAKING_SENTENCES } from '../data/speakingData';
 import { speakWord } from '../utils/speech';
 import { Storage } from '../utils/storage';
 import { useToast } from '../components/Toast';
+import { SpeakingBuddy } from './SpeakingBuddy';
+import { NavTab } from '../components/Sidebar';
 
-export const Speaking: React.FC = () => {
+interface SpeakingProps {
+  onRefreshWords?: () => void;
+  onNavigate?: (tab: NavTab) => void;
+}
+
+export const Speaking: React.FC<SpeakingProps> = ({
+  onRefreshWords,
+  onNavigate,
+}) => {
   const toast = useToast();
 
+  const [activeTab, setActiveTab] = useState<'ai-buddy' | 'drills'>('ai-buddy');
   const [activeCategory, setActiveCategory] = useState<SpeakingCategory>('Irregular verbs');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -201,53 +212,95 @@ export const Speaking: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-7 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold">
-          <Mic className="w-3.5 h-3.5" />
-          <span>Interactive Speech & Pronunciation</span>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-          Speaking & Talaffuz mashqi
-        </h1>
-        <p className="text-slate-400 text-sm max-w-2xl">
-          Jumlalarni tinglang, mikrofon orqali inglizcha talaffuz qiling va AI orqali so'zma-so'z aniqlik darajasini tekshiring.
-        </p>
-      </div>
-
-      {/* Category Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {categories.map((cat) => (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Top Switcher: AI Speaking (Voice Only) vs Sentence Drills */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-white/10 w-fit">
           <button
-            key={cat}
-            onClick={() => {
-              setActiveCategory(cat);
-              setCurrentIndex(0);
-              setResult(null);
-              setSpokenText('');
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              activeCategory === cat
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                : 'bg-slate-900 border border-white/5 text-slate-400 hover:text-white'
+            onClick={() => setActiveTab('ai-buddy')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'ai-buddy'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/20'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            {cat}
+            <Mic className="w-4 h-4" />
+            <span>🎙️ AI Speaking (Voice Only)</span>
           </button>
-        ))}
+
+          <button
+            onClick={() => setActiveTab('drills')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              activeTab === 'drills'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>🎯 Gaplar talaffuzi (Sentences)</span>
+          </button>
+        </div>
+
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('ai-chat')}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+          >
+            <span>💬 AI Chat (Text Only) ga o'tish</span>
+          </button>
+        )}
       </div>
 
-      {/* Speech API fallback notification */}
-      {!speechSupported && (
-        <div className="p-4 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-200 text-xs flex items-start gap-3">
-          <Info className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
-          <div>
-            <strong>Eslatma:</strong> Brauzeringizda avtomatik ovoz tanish (Speech Recognition API) faol emas yoki qo'llab-quvvatlanmaydi (Chrome va Edge brauzerlarida to'liq ishlaydi).
-            Siz talaffuz audiosini tinglab, mustaqil mashq qilishingiz yoki yozib tekshirishingiz mumkin.
+      {activeTab === 'ai-buddy' ? (
+        <SpeakingBuddy onRefreshWords={onRefreshWords} onNavigate={onNavigate} />
+      ) : (
+        <div className="space-y-7 max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold">
+              <Mic className="w-3.5 h-3.5" />
+              <span>Interactive Speech & Pronunciation</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Speaking & Talaffuz mashqi
+            </h1>
+            <p className="text-slate-400 text-sm max-w-2xl">
+              Jumlalarni tinglang, mikrofon orqali inglizcha talaffuz qiling va AI orqali so'zma-so'z aniqlik darajasini tekshiring.
+            </p>
           </div>
-        </div>
-      )}
+
+          {/* Category Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  setActiveCategory(cat);
+                  setCurrentIndex(0);
+                  setResult(null);
+                  setSpokenText('');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  activeCategory === cat
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'bg-slate-900 border border-white/5 text-slate-400 hover:text-white'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Speech API fallback notification */}
+          {!speechSupported && (
+            <div className="p-4 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-amber-200 text-xs flex items-start gap-3">
+              <Info className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+              <div>
+                <strong>Eslatma:</strong> Brauzeringizda avtomatik ovoz tanish (Speech Recognition API) faol emas yoki qo'llab-quvvatlanmaydi (Chrome va Edge brauzerlarida to'liq ishlaydi).
+                Siz talaffuz audiosini tinglab, mustaqil mashq qilishingiz yoki yozib tekshirishingiz mumkin.
+              </div>
+            </div>
+          )}
 
       {/* Main Sentence Card */}
       <div className="rounded-3xl bg-[#0d1322] border border-white/10 p-6 sm:p-10 shadow-2xl space-y-8">
@@ -412,5 +465,7 @@ export const Speaking: React.FC = () => {
         </div>
       </div>
     </div>
+  )}
+</div>
   );
 };
