@@ -732,22 +732,64 @@ export function generateBuddyResponse(
       { word: 'school', translation: 'maktab', pronunciation: '/skuːl/', partOfSpeech: 'noun' },
     ];
   } else if (lower.includes('student') || lower.includes('school') || lower.includes('yes, i am') || lower.includes('work')) {
-    englishText = `That's cool! What do you like to do for fun? ⚽`;
+    englishText = `That's cool! What do you like to do for fun in your free time? ⚽`;
     uzbekText = `Zo'r! Bo'sh vaqtingda nima qilishni yoqtirasan? ⚽`;
     suggestions = [
-      { english: 'I like playing football.', uzbek: 'Futbol o\'ynashni yoqtiraman.' },
+      { english: 'I like playing games.', uzbek: 'O\'yinlar o\'ynashni yoqtiraman.' },
       { english: 'I like reading books.', uzbek: 'Kitob o\'qishni yoqtiraman.' },
-      { english: 'I like computer games.', uzbek: 'Kompyuter o\'yinlarini yoqtiraman.' },
+      { english: 'I like sports.', uzbek: 'Sportni yoqtiraman.' },
     ];
     keyVocabulary = [
       { word: 'fun', translation: 'qiziqarli mashg\'ulot, xursandchilik', pronunciation: '/fʌn/', partOfSpeech: 'noun' },
       { word: 'like', translation: 'yoqtirmoq', pronunciation: '/laɪk/', partOfSpeech: 'verb' },
     ];
-  } else if (lower.includes('football') || lower.includes('book') || lower.includes('game') || lower.includes('music')) {
-    englishText = `I love that too! What is your favorite food? 🍕`;
-    uzbekText = `Men ham buni yaxshi ko'raman! Sevimli taoming nima? 🍕`;
+  } else if (lower.includes('game') || lower.includes('minecraft') || lower.includes('play')) {
+    if (lower.includes('minecraft')) {
+      englishText = `Minecraft is awesome! What did you build in Minecraft? 🏰`;
+      uzbekText = `Minecraft ajoyib o'yin! Minecraftda nima qurdingiz? 🏰`;
+      suggestions = [
+        { english: 'I built a big castle.', uzbek: 'Men katta qasr qurdim.' },
+        { english: 'I built a house with a garden.', uzbek: 'Bog\'li uy qurdim.' },
+        { english: 'I explored a deep cave.', uzbek: 'Chuqur g\'orni kashf qildim.' },
+      ];
+    } else {
+      englishText = `Oh, I love games too! Which game is your favorite? 🎮`;
+      uzbekText = `O, men ham o'yinlarni yoqtiraman! Qaysi o'yin sizning eng sevimlingiz? 🎮`;
+      suggestions = [
+        { english: 'I play Minecraft and Free Fire.', uzbek: 'Men Minecraft va Free Fire o\'ynayman.' },
+        { english: 'I play football games.', uzbek: 'Futbol o\'yinlarini o\'ynayman.' },
+        { english: 'I play puzzles on my phone.', uzbek: 'Telefonimda boshqotirmalar o\'ynayman.' },
+      ];
+    }
+  } else if (lower.includes('build') || lower.includes('castle') || lower.includes('house')) {
+    englishText = `That sounds creative! Did you build it alone or with friends? 🤝`;
+    uzbekText = `Juda ijodiy tuyulyapti! Buni yolg'iz qordingizmi yoki do'stlaringiz bilanmi? 🤝`;
     suggestions = [
-      { english: 'I love plov.', uzbek: 'Men oshni juda yaxshi ko\'raman.' },
+      { english: 'I built it by myself.', uzbek: 'O\'zim yolg\'iz qurdim.' },
+      { english: 'I built it with my friends.', uzbek: 'Do\'stlarim bilan qurdik.' },
+      { english: 'We play multiplayer together.', uzbek: 'Birga ko\'p kishilik rejimda o\'ynaymiz.' },
+    ];
+  } else if (lower.includes('movie') || lower.includes('cinema') || lower.includes('film')) {
+    englishText = `Movies are great! What kind of movies do you like to watch? 🎬`;
+    uzbekText = `Filmlar ajoyib! Qanday turdagi filmlarni tomosha qilishni yoqtirasiz? 🎬`;
+    suggestions = [
+      { english: 'I love action and adventure movies.', uzbek: 'Jangari va sarguzasht filmlarni yaxshi ko\'raman.' },
+      { english: 'I like comedy films.', uzbek: 'Komediya filmlarini yoqtiraman.' },
+      { english: 'I enjoy animated movies.', uzbek: 'Multfilmlarni yoqtiraman.' },
+    ];
+  } else if (lower.includes('football') || lower.includes('sport')) {
+    englishText = `Sports keep us healthy and active! What is your favorite team or player? ⚽`;
+    uzbekText = `Sport bizni sog'lom va tetik saqlaydi! Sevimli jamoangiz yoki o'yinchingiz kim? ⚽`;
+    suggestions = [
+      { english: 'I support Real Madrid.', uzbek: 'Real Madridga muxlislik qilaman.' },
+      { english: 'I like playing with my classmates.', uzbek: 'Sinfdoshlarim bilan o\'ynashni yoqtiraman.' },
+      { english: 'I play every weekend.', uzbek: 'Har dam olish kuni o\'ynayman.' },
+    ];
+  } else if (lower.includes('food') || lower.includes('pizza') || lower.includes('plov') || lower.includes('eat') || lower.includes('cook')) {
+    englishText = `Delicious! What is your absolute favorite food or dish? 🍕`;
+    uzbekText = `Mazali! Sizning eng sevimli taomingiz nima? 🍕`;
+    suggestions = [
+      { english: 'I love Uzbek plov.', uzbek: 'Men o\'zbek oshini yaxshi ko\'raman.' },
       { english: 'My favorite food is pizza.', uzbek: 'Sevimli taomim pitsa.' },
       { english: 'I like somsa and lagman.', uzbek: 'Somsa va lag\'monni yoqtiraman.' },
     ];
@@ -756,13 +798,13 @@ export function generateBuddyResponse(
       { word: 'food', translation: 'ovqat, taom', pronunciation: '/fuːd/', partOfSpeech: 'noun' },
     ];
   } else {
-    // Default supportive conversational response
-    englishText = `Good job! You are speaking English very well! 😊 What would you like to talk about next?`;
-    uzbekText = `Barakalla! Siz ingliz tilida juda yaxshi gapiryapsiz! 😊 Keyin nima haqida gaplashamiz?`;
+    // Default supportive conversational response maintaining openness
+    englishText = `That's interesting! Tell me more about that. 😊`;
+    uzbekText = `Bu juda qiziq! Bu haqda ko'proq aytib bering. 😊`;
     suggestions = [
-      { english: 'Tell me about your day.', uzbek: 'Kuning qanday o\'tganini aytib ber.' },
-      { english: 'Let\'s practice more words.', uzbek: 'Keling, yana so\'zlarni mashq qilaylik.' },
-      { english: 'I want to learn English!', uzbek: 'Men ingliz tilini o\'rganishni xohlayman!' },
+      { english: 'Let me explain.', uzbek: 'Tushuntirib beray.' },
+      { english: 'What do you think about it?', uzbek: 'Bu haqda nima deb o\'ylaysan?' },
+      { english: 'I really enjoy this topic.', uzbek: 'Menga bu mavzu juda yoqadi.' },
     ];
   }
 

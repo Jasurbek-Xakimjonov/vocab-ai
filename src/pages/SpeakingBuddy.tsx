@@ -52,7 +52,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
   onNavigate,
 }) => {
   const toast = useToast();
-  const { user, isPro, speakingUsage, updateSpeakingUsageState } = useAuth();
+  const { user, profile, isPro, speakingUsage, updateSpeakingUsageState } = useAuth();
 
   // PRO upgrade modal state
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -94,7 +94,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
   const [context, setContext] = useState<EngineContext>({
     topicId: BUDDY_TOPICS[0].id,
     turnCount: 0,
-    userName: user?.email ? user.email.split('@')[0] : '',
+    userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
   });
 
   // Sync state on updates
@@ -258,7 +258,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
     setContext({
       topicId: chosenTopic.id,
       turnCount: 0,
-      userName: user?.email ? user.email.split('@')[0] : '',
+      userName: profile?.name || (user as any)?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : ''),
     });
 
     // Voice speaking starts automatically
