@@ -262,7 +262,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Speaking Progress */}
         <div
-          onClick={() => onNavigate('speaking')}
+          onClick={() => onNavigate('ai-speaking')}
           className="p-5 rounded-3xl bg-[#0d1322] border border-white/5 hover:border-emerald-500/40 cursor-pointer transition-all hover:-translate-y-1 shadow-xl flex flex-col justify-between"
         >
           <div>
@@ -347,21 +347,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </div>
 
-          {/* Card 3: Speaking */}
-          <div
-            onClick={() => onNavigate('speaking')}
-            className="group p-6 rounded-3xl bg-[#0d1322] border border-white/5 hover:border-emerald-500/40 cursor-pointer transition-all hover:-translate-y-1 shadow-xl space-y-3"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
-              <Mic className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors">
-              Speaking & Ovozli Mashq
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Jumlalarni mikrofonga inglizcha talaffuz qiling va AI so'zma-so'z aniqlik foizini baholasin.
-            </p>
-          </div>
 
           {/* Card 3b: Speaking Videos */}
           <div

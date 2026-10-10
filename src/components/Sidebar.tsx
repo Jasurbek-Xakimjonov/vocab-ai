@@ -87,23 +87,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Zap,
     },
     {
-      id: 'speaking' as NavTab,
+      id: 'ai-speaking' as NavTab,
       label: 'Speaking',
-      sublabel: 'Ovozli talaffuz',
+      sublabel: '🎙️ Ovozli AI suhbat',
       icon: Mic,
+      highlight: true,
     },
     {
       id: 'speaking-videos' as NavTab,
       label: 'Speaking Videos',
       sublabel: '🎬 Video & Nutq',
       icon: Film,
-      highlight: true,
-    },
-    {
-      id: 'ai-speaking' as NavTab,
-      label: 'AI Speaking',
-      sublabel: '🎙️ Ovozli suhbat',
-      icon: Bot,
       highlight: true,
     },
     {

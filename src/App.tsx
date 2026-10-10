@@ -163,8 +163,8 @@ export function AppContent() {
             />
           )}
 
-          {currentTab === 'speaking' && (
-            <Speaking
+          {(currentTab === 'speaking' || currentTab === 'ai-speaking') && (
+            <SpeakingBuddy
               onRefreshWords={refreshWords}
               onNavigate={setCurrentTab}
             />
@@ -172,13 +172,6 @@ export function AppContent() {
 
           {currentTab === 'speaking-videos' && (
             <SpeakingVideos
-              onRefreshWords={refreshWords}
-              onNavigate={setCurrentTab}
-            />
-          )}
-
-          {currentTab === 'ai-speaking' && (
-            <SpeakingBuddy
               onRefreshWords={refreshWords}
               onNavigate={setCurrentTab}
             />

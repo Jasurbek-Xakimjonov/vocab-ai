@@ -706,80 +706,61 @@ export function generateBuddyResponse(
         { word: 'today', translation: 'bugun', pronunciation: '/təˈdeɪ/', partOfSpeech: 'adverb' },
       ];
     }
-  } else if (nameMatch || (newContext.userName && context.turnCount === 1)) {
-    englishText = `Nice to meet you, ${name}! 😊 Where do you live?`;
-    uzbekText = `${name}, tanishganimdan xursandman! 😊 Qayerda yashaysan?`;
+  } else if (lower.includes('horror')) {
+    englishText = `Horror games can be really spooky! Which horror game has frightened you the most? 👻`;
+    uzbekText = `Qo'rqinchli o'yinlar haqiqatan ham juda dahshatli bo'ladi! Qaysi o'yin sizni eng ko'p qo'rquvga solgan? 👻`;
     suggestions = [
-      { english: 'I live in Tashkent.', uzbek: 'Men Toshkentda yashayman.' },
-      { english: 'I live in Samarkand.', uzbek: 'Men Samarqandda yashayman.' },
-      { english: 'I live in Uzbekistan.', uzbek: 'Men O\'zbekistonda yashayman.' },
+      { english: 'Outlast is the scariest game.', uzbek: 'Outlast eng dahshatli o\'yin.' },
+      { english: 'I like Five Nights at Freddy\'s.', uzbek: 'Menga FNAF yoqadi.' },
+      { english: 'I prefer psychological horror.', uzbek: 'Menga psixologik dahshatli o\'yinlar yoqadi.' },
     ];
-    keyVocabulary = [
-      { word: 'meet', translation: 'uchrashmoq, tanishmoq', pronunciation: '/miːt/', partOfSpeech: 'verb' },
-      { word: 'live', translation: 'yashamoq', pronunciation: '/lɪv/', partOfSpeech: 'verb' },
+  } else if (lower.includes('build') || lower.includes('house') || lower.includes('castle')) {
+    englishText = `Building houses takes great imagination! What materials do you usually build with, like wood or stone? 🏠`;
+    uzbekText = `Uy qurish katta tasavvurni talab qiladi! Odatda qanday materiallardan qurasiz, yog'och yoki toshmi? 🏠`;
+    suggestions = [
+      { english: 'I build with oak wood and glass.', uzbek: 'Eman yog\'ochi va shishadan quraman.' },
+      { english: 'I make modern mansions.', uzbek: 'Zamonaviy koshonalar quraman.' },
+      { english: 'I like underground secret bases.', uzbek: 'Yer osti maxfiy bazalarini yoqtiraman.' },
+    ];
+  } else if (lower.includes('friend')) {
+    englishText = `Playing with friends makes everything much more fun! Do you use voice chat while playing together? 🎧`;
+    uzbekText = `Do'stlar bilan o'ynash har doim yanada maroqli! Birga o'ynayotganda ovozli chatdan foydalanasizmi? 🎧`;
+    suggestions = [
+      { english: 'Yes, we talk on Discord.', uzbek: 'Ha, Discord orqali gaplashamiz.' },
+      { english: 'We play multiplayer together.', uzbek: 'Birga ko\'p kishilik rejimda o\'ynaymiz.' },
+      { english: 'We play at school or home.', uzbek: 'Maktabda yoki uyda birga o\'ynaymiz.' },
+    ];
+  } else if (lower.includes('minecraft')) {
+    englishText = `Minecraft is awesome! What do you like to build or explore the most in Minecraft? 🏰`;
+    uzbekText = `Minecraft ajoyib o'yin! Unda eng ko'p nima qurishni yoki kashf qilishni yoqtirasiz? 🏰`;
+    suggestions = [
+      { english: 'I usually build houses and farms.', uzbek: 'Men odatda uylar va fermalar quraman.' },
+      { english: 'I like mining for diamonds and netherite.', uzbek: 'Olmos va neterit qazishni yoqtiraman.' },
+      { english: 'I play survival mode with friends.', uzbek: 'Do\'stlarim bilan omon qolish rejimida o\'ynayman.' },
+    ];
+  } else if (lower.includes('game') || lower.includes('play')) {
+    englishText = `Oh, I love games too! What kind of games do you enjoy playing the most? 🎮`;
+    uzbekText = `O, men ham o'yinlarni yoqtiraman! Qaysi turdagi o'yinlarni o'ynashni eng ko'p yoqtirasiz? 🎮`;
+    suggestions = [
+      { english: 'I like Minecraft and Roblox.', uzbek: 'Men Minecraft va Robloxni yoqtiraman.' },
+      { english: 'I like competitive shooting games.', uzbek: 'Menga musobaqali otishma o\'yinlari yoqadi.' },
+      { english: 'I like action and adventure games.', uzbek: 'Menga jangari va sarguzasht o\'yinlar yoqadi.' },
+    ];
+  } else if (nameMatch || (newContext.userName && context.turnCount === 1)) {
+    englishText = `Nice to meet you, ${name}! 😊 What would you like to talk about today?`;
+    uzbekText = `${name}, tanishganimdan xursandman! 😊 Bugun nima haqida suhbatlashishni xohlaysiz?`;
+    suggestions = [
+      { english: 'Let\'s talk about games.', uzbek: 'Keling, o\'yinlar haqida gaplashamiz.' },
+      { english: 'Let\'s talk about school and learning.', uzbek: 'Maktab va o\'qish haqida gaplashaylik.' },
+      { english: 'Let\'s talk about daily life.', uzbek: 'Kundalik hayot haqida gaplashamiz.' },
     ];
   } else if (cityMatch || lower.includes('live in') || lower.includes('tashkent') || lower.includes('samarkand')) {
     const city = newContext.userCity || 'there';
-    englishText = `Awesome! ${city} is a wonderful place. How old are you?`;
-    uzbekText = `Ajoyib! ${city} juda ajoyib joy. Yoshing nechida?`;
+    englishText = `Awesome! ${city} is a wonderful place. How is the weather there today? ☀️`;
+    uzbekText = `Ajoyib! ${city} juda ajoyib joy. U yerda bugun ob-havo qanday? ☀️`;
     suggestions = [
-      { english: 'I am 15 years old.', uzbek: 'Men 15 yoshdaman.' },
-      { english: 'I am 18 years old.', uzbek: 'Men 18 yoshdaman.' },
-      { english: 'I am 20 years old.', uzbek: 'Men 20 yoshdaman.' },
-    ];
-    keyVocabulary = [
-      { word: 'wonderful', translation: 'ajoyib, a\'lo', pronunciation: '/ˈwʌn.dɚ.fəl/', partOfSpeech: 'adjective' },
-      { word: 'old', translation: 'yoshda (yoshga nisbatan)', pronunciation: '/oʊld/', partOfSpeech: 'adjective' },
-    ];
-  } else if (ageMatch || lower.includes('years old')) {
-    englishText = `Nice! Are you a student? 🎒`;
-    uzbekText = `Yaxshi! Siz o'quvchimisiz? 🎒`;
-    suggestions = [
-      { english: 'Yes, I am a student.', uzbek: 'Ha, men o\'quvchiman.' },
-      { english: 'Yes, I go to school.', uzbek: 'Ha, men maktabga boraman.' },
-      { english: 'No, I work.', uzbek: 'Yo\'q, men ishlayman.' },
-    ];
-    keyVocabulary = [
-      { word: 'student', translation: 'o\'quvchi, talaba', pronunciation: '/ˈstuː.dənt/', partOfSpeech: 'noun' },
-      { word: 'school', translation: 'maktab', pronunciation: '/skuːl/', partOfSpeech: 'noun' },
-    ];
-  } else if (lower.includes('student') || lower.includes('school') || lower.includes('yes, i am') || lower.includes('work')) {
-    englishText = `That's cool! What do you like to do for fun in your free time? ⚽`;
-    uzbekText = `Zo'r! Bo'sh vaqtingda nima qilishni yoqtirasan? ⚽`;
-    suggestions = [
-      { english: 'I like playing games.', uzbek: 'O\'yinlar o\'ynashni yoqtiraman.' },
-      { english: 'I like reading books.', uzbek: 'Kitob o\'qishni yoqtiraman.' },
-      { english: 'I like sports.', uzbek: 'Sportni yoqtiraman.' },
-    ];
-    keyVocabulary = [
-      { word: 'fun', translation: 'qiziqarli mashg\'ulot, xursandchilik', pronunciation: '/fʌn/', partOfSpeech: 'noun' },
-      { word: 'like', translation: 'yoqtirmoq', pronunciation: '/laɪk/', partOfSpeech: 'verb' },
-    ];
-  } else if (lower.includes('game') || lower.includes('minecraft') || lower.includes('play')) {
-    if (lower.includes('minecraft')) {
-      englishText = `Minecraft is awesome! What did you build in Minecraft? 🏰`;
-      uzbekText = `Minecraft ajoyib o'yin! Minecraftda nima qurdingiz? 🏰`;
-      suggestions = [
-        { english: 'I built a big castle.', uzbek: 'Men katta qasr qurdim.' },
-        { english: 'I built a house with a garden.', uzbek: 'Bog\'li uy qurdim.' },
-        { english: 'I explored a deep cave.', uzbek: 'Chuqur g\'orni kashf qildim.' },
-      ];
-    } else {
-      englishText = `Oh, I love games too! Which game is your favorite? 🎮`;
-      uzbekText = `O, men ham o'yinlarni yoqtiraman! Qaysi o'yin sizning eng sevimlingiz? 🎮`;
-      suggestions = [
-        { english: 'I play Minecraft and Free Fire.', uzbek: 'Men Minecraft va Free Fire o\'ynayman.' },
-        { english: 'I play football games.', uzbek: 'Futbol o\'yinlarini o\'ynayman.' },
-        { english: 'I play puzzles on my phone.', uzbek: 'Telefonimda boshqotirmalar o\'ynayman.' },
-      ];
-    }
-  } else if (lower.includes('build') || lower.includes('castle') || lower.includes('house')) {
-    englishText = `That sounds creative! Did you build it alone or with friends? 🤝`;
-    uzbekText = `Juda ijodiy tuyulyapti! Buni yolg'iz qordingizmi yoki do'stlaringiz bilanmi? 🤝`;
-    suggestions = [
-      { english: 'I built it by myself.', uzbek: 'O\'zim yolg\'iz qurdim.' },
-      { english: 'I built it with my friends.', uzbek: 'Do\'stlarim bilan qurdik.' },
-      { english: 'We play multiplayer together.', uzbek: 'Birga ko\'p kishilik rejimda o\'ynaymiz.' },
+      { english: 'The weather is sunny and warm.', uzbek: 'Ob-havo quyoshli va iliq.' },
+      { english: 'It is a bit cold today.', uzbek: 'Bugun biroz sovuq.' },
     ];
   } else if (lower.includes('movie') || lower.includes('cinema') || lower.includes('film')) {
     englishText = `Movies are great! What kind of movies do you like to watch? 🎬`;
@@ -790,12 +771,11 @@ export function generateBuddyResponse(
       { english: 'I enjoy animated movies.', uzbek: 'Multfilmlarni yoqtiraman.' },
     ];
   } else if (lower.includes('football') || lower.includes('sport')) {
-    englishText = `Sports keep us healthy and active! What is your favorite team or player? ⚽`;
-    uzbekText = `Sport bizni sog'lom va tetik saqlaydi! Sevimli jamoangiz yoki o'yinchingiz kim? ⚽`;
+    englishText = `Sports keep us healthy and active! What is your favorite team or sport? ⚽`;
+    uzbekText = `Sport bizni sog'lom va tetik saqlaydi! Sevimli jamoangiz yoki sport turi nima? ⚽`;
     suggestions = [
       { english: 'I support Real Madrid.', uzbek: 'Real Madridga muxlislik qilaman.' },
-      { english: 'I like playing with my classmates.', uzbek: 'Sinfdoshlarim bilan o\'ynashni yoqtiraman.' },
-      { english: 'I play every weekend.', uzbek: 'Har dam olish kuni o\'ynayman.' },
+      { english: 'I like playing football with friends.', uzbek: 'Do\'stlarim bilan futbol o\'ynashni yoqtiraman.' },
     ];
   } else if (lower.includes('food') || lower.includes('pizza') || lower.includes('plov') || lower.includes('eat') || lower.includes('cook')) {
     englishText = `Delicious! What is your absolute favorite food or dish? 🍕`;
@@ -805,18 +785,13 @@ export function generateBuddyResponse(
       { english: 'My favorite food is pizza.', uzbek: 'Sevimli taomim pitsa.' },
       { english: 'I like somsa and lagman.', uzbek: 'Somsa va lag\'monni yoqtiraman.' },
     ];
-    keyVocabulary = [
-      { word: 'favorite', translation: 'sevimli, eng sevimli', pronunciation: '/ˈfeɪ.vər.ət/', partOfSpeech: 'adjective' },
-      { word: 'food', translation: 'ovqat, taom', pronunciation: '/fuːd/', partOfSpeech: 'noun' },
-    ];
   } else {
-    // Default supportive conversational response maintaining openness
-    englishText = `That's interesting! Tell me more about that. 😊`;
-    uzbekText = `Bu juda qiziq! Bu haqda ko'proq aytib bering. 😊`;
+    // Dynamic context-responsive default
+    englishText = `That sounds very interesting! Can you tell me a little more about that? 😊`;
+    uzbekText = `Bu juda qiziq tuyulyapti! Bu haqda biroz ko'proq aytib bera olasizmi? 😊`;
     suggestions = [
-      { english: 'Let me explain.', uzbek: 'Tushuntirib beray.' },
+      { english: 'Sure, let me tell you more.', uzbek: 'Albatta, ko\'proq aytib beraman.' },
       { english: 'What do you think about it?', uzbek: 'Bu haqda nima deb o\'ylaysan?' },
-      { english: 'I really enjoy this topic.', uzbek: 'Menga bu mavzu juda yoqadi.' },
     ];
   }
 

@@ -28,7 +28,6 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentTab, onSelectTab })
     { id: 'speaking-videos' as NavTab, label: 'Videolar', icon: Film },
     { id: 'flashcards' as NavTab, label: 'Kartalar', icon: Layers },
     { id: 'irregular-verbs' as NavTab, label: "Fe'llar", icon: Zap },
-    { id: 'speaking' as NavTab, label: 'Nutq', icon: Mic },
     { id: 'grammar' as NavTab, label: 'Grammar', icon: GraduationCap },
     { id: 'practice' as NavTab, label: 'Mashq', icon: Dumbbell },
     { id: 'progress' as NavTab, label: 'Natija', icon: LineChart },

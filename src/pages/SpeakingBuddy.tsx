@@ -295,6 +295,7 @@ export const SpeakingBuddy: React.FC<SpeakingBuddyProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user?.id,
+          sessionId: `session_${sessionStartTime}`,
           message: clean,
           history: newMessages.slice(-20),
           level: buddyStateRef.current.currentLevel,

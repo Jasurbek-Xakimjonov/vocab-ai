@@ -328,6 +328,8 @@ export const Practice: React.FC<PracticeProps> = ({
           return {
             targetWord: target,
             promptTitle: "To'g'ri tarjimani tanlang",
+            promptText: target.word,
+            subPrompt: "Inglizcha so'zning to'g'ri o'zbekcha ma'nosini tanlang",
             options,
             correctOption: target.translation,
             modeType: 'mc',
@@ -339,6 +341,8 @@ export const Practice: React.FC<PracticeProps> = ({
           return {
             targetWord: target,
             promptTitle: "Inglizcha so'zni toping",
+            promptText: target.translation,
+            subPrompt: "O'zbekcha so'zning to'g'ri inglizcha tarjimasini tanlang",
             options,
             correctOption: target.word,
             modeType: 'mc',
@@ -349,6 +353,8 @@ export const Practice: React.FC<PracticeProps> = ({
           return {
             targetWord: target,
             promptTitle: 'Bu tarjima to‘g‘rimi?',
+            promptText: target.word,
+            subPrompt: `O'zbekcha tarjimasi: "${shownTranslation}"`,
             isTrueStatement: isTrue,
             statementTranslation: shownTranslation,
             modeType: 'tf',
@@ -370,6 +376,8 @@ export const Practice: React.FC<PracticeProps> = ({
           return {
             targetWord: target,
             promptTitle: "Inglizcha so'zni yozing (Spelling)",
+            promptText: target.translation,
+            subPrompt: "O'zbekcha so'zning to'g'ri inglizcha yozilishini kiriting",
             correctOption: target.word,
             acceptedAnswers: [target.word.toLowerCase().trim()],
             modeType: 'typing',

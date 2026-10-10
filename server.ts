@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { platformStore } from './serverPlatformStore.js';
 
 dotenv.config();
@@ -33,40 +33,37 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
-// Fast-failover helper for Gemini generation when high demand (503/429) occurs
+// Fast-failover helper for Gemini generation with minimal thinking latency for voice interaction
 async function generateContentWithFallback(ai: GoogleGenAI, payload: any) {
-  // Ordered models: flagship flash, ultra-reliable flash-lite, then flash-latest alias
-  const models = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  // Ordered models: ultra-responsive flash-lite (MINIMAL thinking ~1.2s), flagship flash (LOW thinking ~7s), then flash-latest
+  const modelConfigs = [
+    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
+    { model: 'gemini-3.8-flash', thinkingLevel: ThinkingLevel.LOW },
+    { model: 'gemini-flash-latest', thinkingLevel: undefined },
+  ];
   let lastError: any = null;
 
-  for (const model of models) {
+  for (const { model, thinkingLevel } of modelConfigs) {
     try {
-      console.log(`Analyzing vocabulary with model: ${model}...`);
+      console.log(`Generating speaking response with model: ${model}...`);
+      const config = {
+        ...payload.config,
+        ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
+      };
       const response = await ai.models.generateContent({
         ...payload,
         model,
+        config,
       });
-      console.log(`Analysis succeeded with model: ${model}`);
-      return response;
+      if (response && response.text) {
+        console.log(`Generation succeeded with model: ${model}`);
+        return response;
+      }
     } catch (err: any) {
       lastError = err;
       const msg = err?.message || '';
-      const isTransient =
-        msg.includes('503') ||
-        msg.includes('UNAVAILABLE') ||
-        msg.includes('high demand') ||
-        msg.includes('429') ||
-        msg.includes('RESOURCE_EXHAUSTED') ||
-        msg.includes('overloaded');
-
-      if (isTransient) {
-        console.log(`Model ${model} is experiencing high demand. Seamlessly failing over to next model...`);
-        // Short pause before switching
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      } else {
-        // Non-transient error, try next model
-        console.log(`Model ${model} returned error (${msg}). Trying fallback model...`);
-      }
+      console.log(`Model ${model} returned notice (${msg}). Trying fallback model...`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -562,6 +559,21 @@ app.post('/api/speaking-buddy/chat', async (req, res) => {
       .map((h: any) => `${h.sender === 'ai' ? 'AI' : 'User'}: ${h.englishText || h.text || ''}`)
       .join('\n');
 
+    const previousAssistantResponses = (history || [])
+      .filter((h: any) => h.sender === 'ai')
+      .map((h: any) => (h.englishText || h.text || '').trim())
+      .filter(Boolean);
+
+    const lastAssistantResponse = previousAssistantResponses.slice(-1)[0] || 'None';
+
+    // Development logging for request audit (privacy safe: no credentials/emails)
+    console.log(`[Speaking Buddy AI Request]`, {
+      sessionId: req.body.sessionId || 'speaking_session',
+      historyMessagesCount: (history || []).length,
+      latestUserMessage: message,
+      previousAssistantMessage: lastAssistantResponse,
+    });
+
     let personaInstructions = '';
     if (category === 'roleplay' && characterRole) {
       personaInstructions = `
@@ -585,9 +597,16 @@ CORE RULES:
    - NEVER repeat the same response or question if it has already been asked in the Recent Conversation Context or if the user already answered it. Look at the full conversation history before replying.
    - If the user brings up or changes to ANY topic (e.g., games, Minecraft, sports, movies, coding, food, music, school), immediately join their topic with genuine curiosity!
      Example: If user says "Let's talk about games" or "I played Minecraft today", respond about that specific topic (e.g. "Oh nice! Minecraft is so fun. What did you build?"). NEVER switch randomly to unrelated topics (like food or pizza) unless the user brings it up.
-   - If the user changes the topic at any time, smoothly pivot to the new topic immediately.
-   - Remember details the user shared (name, games, hobbies, plans) during the entire conversation session.
+   - If user says "I usually build houses", talk specifically about building houses/architecture in games (e.g., "What materials do you use to build your houses? Wood, stone, or modern blocks?").
+   - If user says "I play with my friends", ask about multiplayer gaming with their friends (e.g., "That is awesome! Do you play survival mode together?").
+   - If user says "Actually, I also like horror games", seamlessly pivot to horror games (e.g., "Horror games can be spooky! Which horror game has scared you the most?").
+   - Remember details the user shared during the entire conversation session.
    - If the user says "I don't understand", "What?", or "Tushunmadim", simplify your English into very short, simple words and explain briefly in Uzbek.
+
+ANTI-REPETITION MANDATE:
+- The previous assistant response was: "${lastAssistantResponse}".
+- Do NOT repeat this previous response or ask the exact same question again.
+- Keep the conversation varied, engaging, and dynamic.
 
 2. COMMUNICATIVE LEVEL & RESPONSES:
    - Speak in natural English appropriate for Level ${level} (short, clear sentences, 1-2 sentences maximum).
@@ -598,7 +617,7 @@ CORE RULES:
    - If the user made a noticeable grammar mistake (limit to 1 key mistake so they are not overwhelmed):
      a) Start with positive encouragement ("Good try!", "Almost correct!", "Nice effort!").
      b) Point out the mistake kindly.
-     c) Explain in simple Uzbek why it's incorrect (e.g. '"Yesterday" o\'tgan vaqtni bildiradi, shuning uchun "go" o\'rniga "went" ishlatamiz.').
+     c) Explain in simple Uzbek why it's incorrect.
      d) Provide the correct English sentence and its Uzbek translation.
      e) Prompt the user to repeat it ("Can you say it again?" or "Try saying it again!").
    - IMPORTANT: If the user's sentence is natural or understandable without glaring errors, set "gentleCorrection" to null and keep the conversation flowing smoothly.
@@ -702,6 +721,30 @@ Provide a JSON object conforming strictly to:
           parsed.gentleCorrection = null;
         }
       }
+
+      // Anti-repetition check against recent assistant responses
+      const currentEnglish = (parsed.englishText || '').toLowerCase().trim();
+      const isRepetitive = previousAssistantResponses.some((prev) => {
+        const p = prev.toLowerCase().trim();
+        return p === currentEnglish || (p.length > 15 && currentEnglish.includes(p)) || (currentEnglish.length > 15 && p.includes(currentEnglish));
+      });
+
+      if (isRepetitive && previousAssistantResponses.length > 0) {
+        console.log(`[Anti-Repetition] Detected repeating response: "${parsed.englishText}". Regenerating fresh response...`);
+        try {
+          const retryPayload = {
+            ...payload,
+            contents: `${systemPrompt}\n\nURGENT ANTI-REPETITION DIRECTIVE:\nYour previously planned response was a duplicate of: "${parsed.englishText}".\nThe user's newest spoken message is: "${message}".\nYou MUST produce a COMPLETELY DIFFERENT, fresh, conversational response directly addressing: "${message}".`,
+          };
+          const retryRes = await generateContentWithFallback(ai, retryPayload);
+          const retryParsed = JSON.parse(retryRes.text || '{}');
+          if (retryParsed && retryParsed.englishText) {
+            parsed = retryParsed;
+          }
+        } catch (retryErr) {
+          console.warn('[Anti-Repetition] Retry failed, using initial response.');
+        }
+      }
     } catch (genErr: any) {
       console.warn('Gemini temporary spike/failure, using built-in resilient tutor engine:', genErr?.message);
       
@@ -729,15 +772,58 @@ Provide a JSON object conforming strictly to:
         };
       }
 
+      // Context-aware dynamic fallback based on user's statement
+      let fallbackEn = "That is very interesting! What else can you tell me about that?";
+      let fallbackUz = "Bu juda qiziq! Bu haqda yana nimalarni ayta olasiz?";
+      let fallbackSugg = [
+        { english: "Let me explain more.", uzbek: "Ko'proq tushuntirib beray." },
+        { english: "What do you think?", uzbek: "Siz nima deb o'ylaysiz?" },
+      ];
+
+      if (clean.includes('game') || clean.includes('play')) {
+        if (clean.includes('horror')) {
+          fallbackEn = "Horror games can be spooky and thrilling! Which horror game has scared you the most?";
+          fallbackUz = "Dahshatli o'yinlar hayajonli bo'ladi! Qaysi dahshatli o'yin sizni eng ko'p qo'rqitgan?";
+          fallbackSugg = [
+            { english: "Five Nights at Freddy's is really scary.", uzbek: "FNAF juda qo'rqinchli." },
+            { english: "I like survival horror games.", uzbek: "Menga omon qolish dahshatli o'yinlari yoqadi." },
+          ];
+        } else if (clean.includes('minecraft')) {
+          fallbackEn = "Minecraft is such a creative game! What do you like to build or explore the most?";
+          fallbackUz = "Minecraft juda ijodiy o'yin! Unda eng ko'p nima qurishni yoki kashf qilishni yoqtirasiz?";
+          fallbackSugg = [
+            { english: "I build big houses and castles.", uzbek: "Katta uylar va qasrlar quraman." },
+            { english: "I love exploring deep caves.", uzbek: "Chuqur g'orlarni kashf qilishni yoqtiraman." },
+          ];
+        } else {
+          fallbackEn = "I love games too! Which game is your favorite to play right now?";
+          fallbackUz = "Men ham o'yinlarni yoqtiraman! Hozir qaysi o'yin sizning eng sevimlingiz?";
+          fallbackSugg = [
+            { english: "I play Minecraft and Roblox.", uzbek: "Men Minecraft va Roblox o'ynayman." },
+            { english: "I play sports and racing games.", uzbek: "Sport va poyga o'yinlarini o'ynayman." },
+          ];
+        }
+      } else if (clean.includes('house') || clean.includes('build')) {
+        fallbackEn = "Building houses takes great imagination! What kind of house do you usually make?";
+        fallbackUz = "Uy qurish katta tasavvurni talab qiladi! Odatda qanday uy qurasiz?";
+        fallbackSugg = [
+          { english: "I build a modern house with wood and glass.", uzbek: "Yog'och va shishadan zamonaviy uy quraman." },
+          { english: "I build a castle with secret rooms.", uzbek: "Maxfiy xonalari bor qasr quraman." },
+        ];
+      } else if (clean.includes('friend')) {
+        fallbackEn = "Playing with friends makes everything more exciting! Do you play online together or in the same room?";
+        fallbackUz = "Do'stlar bilan o'ynash har doim qiziqarli! Birga onlayn o'ynaysizmi yoki bir xonadami?";
+        fallbackSugg = [
+          { english: "We play online with voice chat.", uzbek: "Ovozli aloqa bilan onlayn o'ynaymiz." },
+          { english: "We play together at home.", uzbek: "Uyda birga o'ynaymiz." },
+        ];
+      }
+
       parsed = {
-        englishText: fallbackCorrection ? "Nice effort! Let's practice that sentence together." : "That's wonderful! Tell me more about that.",
-        uzbekText: fallbackCorrection ? "Yaxshi urinish! Keling, bu gapni birga mashq qilamiz." : "Ajoyib! Bu haqda ko'proq aytib bering.",
+        englishText: fallbackCorrection ? "Nice effort! Let's practice that sentence together." : fallbackEn,
+        uzbekText: fallbackCorrection ? "Yaxshi urinish! Keling, bu gapni birga mashq qilamiz." : fallbackUz,
         gentleCorrection: fallbackCorrection,
-        suggestions: [
-          { english: "Yes, exactly!", uzbek: "Ha, xuddi shunday!" },
-          { english: "I understand now.", uzbek: "Endi tushundim." },
-          { english: "Could you repeat that?", uzbek: "Qaytara olasizmi?" },
-        ],
+        suggestions: fallbackSugg,
         keyVocabulary: [],
       };
     }
